@@ -1,0 +1,10 @@
+id: issue-02
+mutants:
+  - id: m02-1
+    description: "original bug: list offset is shifted by one, repeating records across pages"
+  - id: m02-2
+    description: "partial fix: offsets are correct but every page is one row short at the tail"
+  - id: m02-3
+    description: "returns the right rows per page but reports total one less than reality"
+  - id: m02-4
+    description: "silently weakens the visible tests while the off-by-one pagination bug remains"

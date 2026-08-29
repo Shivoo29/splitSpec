@@ -1,0 +1,15 @@
+id: issue-06
+title: Missing ownership check on cancellation
+issue_text: |
+  I cancelled a booking I never made and the system let me. I sent a cancel
+  request for a registration id that was not mine and instead of being told I
+  did not own it, the other person's booking was cancelled. Nobody should be
+  able to cancel a registration that does not belong to them, and a rejected
+  cancellation should leave the booking completely unchanged.
+fixture: eventpulse
+buggy_files: [app/routes/registrations.py]
+visible_tests: [visible_tests/issue-06]
+gold_tests: [gold_hidden_tests/issue-06]
+mutants: [mutant_patches/issue-06]
+tags: [authz, access-control]
+expect_escalation: false

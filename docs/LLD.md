@@ -163,7 +163,27 @@ in tests via an injectable client.
 
 **Owns:** `splitspec/llm.py`, `splitspec/tools.py`, `tests/test_tools.py`
 
-Shared machinery for both agents. Tools, all workspace-scoped and path-traversal-guarded:
+Shared machinery for both agents.
+
+**Provider layer.** One OpenAI-compatible client (`/v1/chat/completions`), so a vendor change is a
+`base_url` + `model` change in `.env` and never a code change. Anthropic, Groq, Gemini, OpenRouter,
+Mistral, and a local Ollama all speak it.
+
+- Each role gets its own pinned `config.Provider`. The default setup runs the **fixer and verifier
+  on different models** — independence is a stronger claim when the two are not the same weights.
+  `Settings.independence_note()` records which situation a run was in.
+- `api_keys` is a list for **one** model. Rotate them round-robin on 429 — that is throughput and
+  changes nothing about the experiment.
+- Rate limits are handled by **retry with exponential backoff** (`max_retries`,
+  `retry_base_delay_sec`), never by switching models.
+- **Cross-model fallback is opt-in** (`allow_cross_model_fallback`). When it fires, the run sets
+  `RunResult.degraded=True` with a reason and `ModelUse.fell_back_to`, and Module 11 excludes that
+  case from the headline metric. The model is the experiment's main variable; a silently mixed sweep
+  produces a meaningless result table.
+- Every call appends a `ModelUse` row: role, base_url, model, calls, tokens, cost, retries. **No key
+  is ever written to an artifact, a trace, or a log.**
+
+**Tool layer.** All workspace-scoped and path-traversal-guarded:
 
 `list_files`, `read_file`, `write_file`, `search`, `run_tests` (allowlisted pytest invocations only),
 `finish`.
@@ -176,7 +196,9 @@ Shared machinery for both agents. Tools, all workspace-scoped and path-traversal
 - The client is an interface with a `FakeClient` for tests — no network in the unit suite.
 
 **Depends:** M3. **Done when:** a scripted `FakeClient` conversation drives a full read→write→
-run_tests→finish loop; a path-escape attempt is rejected; the budget cap terminates cleanly.
+run_tests→finish loop; a path-escape attempt is rejected; the budget cap terminates cleanly; a 429
+rotates to the next key and then backs off without changing model; cross-model fallback marks the
+run degraded; no API key appears in any produced artifact.
 
 ---
 

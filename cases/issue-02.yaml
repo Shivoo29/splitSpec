@@ -1,0 +1,15 @@
+id: issue-02
+title: Pagination off-by-one
+issue_text: |
+  When I page through the event listing a few records at a time, some events
+  show up on two consecutive pages and the ordering jumps around. Walking the
+  whole list by paging gives me a different sequence, with duplicates, than
+  fetching the whole list at once. I expected paging through everything to be
+  exactly the same as one big fetch, just broken into chunks.
+fixture: eventpulse
+buggy_files: [app/routes/events.py]
+visible_tests: [visible_tests/issue-02]
+gold_tests: [gold_hidden_tests/issue-02]
+mutants: [mutant_patches/issue-02]
+tags: [pagination, off-by-one]
+expect_escalation: false

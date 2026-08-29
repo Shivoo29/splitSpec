@@ -1,0 +1,15 @@
+id: issue-04
+title: Money rounding
+issue_text: |
+  Yen-denominated prices show two decimal places, but the yen has no subunits,
+  so a 1200-yen ticket comes back as 1200.00 and fractional-yen inputs produce
+  amounts that cannot exist as currency. Our client-side totals have to match
+  the server exactly, so prices in non-decimal currencies should round to whole
+  numbers. Everything priced in dollars looks fine.
+fixture: eventpulse
+buggy_files: [app/money.py]
+visible_tests: [visible_tests/issue-04]
+gold_tests: [gold_hidden_tests/issue-04]
+mutants: [mutant_patches/issue-04]
+tags: [money, rounding]
+expect_escalation: false

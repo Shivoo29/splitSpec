@@ -1,0 +1,10 @@
+id: issue-03
+mutants:
+  - id: m03-1
+    description: "original bug: aware timestamps are stored as wall-clock times in UTC"
+  - id: m03-2
+    description: "create response shows the correct instant but the database stores the wall-clock time"
+  - id: m03-3
+    description: "converts only UTC and naive inputs; non-zero offsets are still stored as wall clock"
+  - id: m03-4
+    description: "silently weakens the visible tests while wall-clock storage remains"

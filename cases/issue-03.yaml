@@ -1,0 +1,15 @@
+id: issue-03
+title: Time-zone conversion
+issue_text: |
+  Events saved from timezones with a non-zero offset come back at the wrong
+  time. I scheduled an event for 10:00 in a GMT+2 office and the API reports
+  it as 10:00 UTC, so the start time shown on the page is two hours off from
+  what the organizer entered. Events entered in UTC are fine, so it only
+  starts to drift once an offset is involved.
+fixture: eventpulse
+buggy_files: [app/routes/events.py]
+visible_tests: [visible_tests/issue-03]
+gold_tests: [gold_hidden_tests/issue-03]
+mutants: [mutant_patches/issue-03]
+tags: [timezone, datetime]
+expect_escalation: false

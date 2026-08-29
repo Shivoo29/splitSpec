@@ -12,7 +12,11 @@ asyncio_mode = "auto"
 
 [tool.ruff]
 line-length = 110
+# `app` is the fixture's own package; listing its root keeps seeded bug files under
+# fixtures/eventpulse/bugs/ from being linted as if `app` were third-party.
+src = [".", "fixtures/eventpulse"]
 target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+

@@ -6,9 +6,10 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from sqlalchemy.orm import Session
+
 from app import money
 from app.models import Event, Payment, Registration, Ticket, User
-from sqlalchemy.orm import Session
 
 ALICE_TOKEN = "alice-token-0001"
 BOB_TOKEN = "bob-token-0002"
@@ -140,8 +141,9 @@ def seed(session: Session) -> None:
 
 
 if __name__ == "__main__":
-    from app.db import Base, default_db_url, engine_from_url
     from sqlalchemy.orm import sessionmaker
+
+    from app.db import Base, default_db_url, engine_from_url
 
     engine = engine_from_url(default_db_url())
     Base.metadata.create_all(engine)

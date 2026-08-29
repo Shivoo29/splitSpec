@@ -1,0 +1,10 @@
+id: issue-05
+mutants:
+  - id: m05-1
+    description: "original bug: ticket ownership is never checked when reading a ticket"
+  - id: m05-2
+    description: "ownership is verified only after the revoked check, leaking revocation state of foreign tickets"
+  - id: m05-3
+    description: "checks against the event creator instead of the ticket owner"
+  - id: m05-4
+    description: "silently weakens the visible tests while the missing ownership check remains"

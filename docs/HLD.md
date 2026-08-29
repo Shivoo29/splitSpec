@@ -24,6 +24,10 @@ This is enforced structurally, not by prompt instruction alone:
   mutation of that file invalidates the run.
 - Gold hidden tests live outside every agent workspace and are mounted only into the judge's
   execution container.
+- The fixer and verifier are pinned to **different models** by default, so independence is
+  architectural as well as procedural. Both models are recorded in `result.json`; a run that fell
+  back to another model is marked `degraded` and dropped from the headline metric rather than
+  silently averaged in.
 
 Violating any of these makes a run scientifically worthless, so each is asserted in code, not left
 to convention.
@@ -75,7 +79,7 @@ LangGraph merges their outputs only at the freeze node.
 | Layer | Choice | Why |
 |---|---|---|
 | Orchestration | LangGraph | explicit node/state graph, parallel fixer‖verifier branch, resumable |
-| Agent model calls | Anthropic SDK inside LangGraph nodes | one tool loop implementation reused by both agents |
+| Agent model calls | One OpenAI-compatible client, per-role pinned provider | vendor is a `base_url` + `model` change; fixer and verifier can run on different models |
 | Execution | Docker, `network_mode: none` | agent-written code never touches host or internet |
 | Fixture app | FastAPI + SQLAlchemy + SQLite (PostgreSQL profile for concurrency realism) | seeded bugs must be real HTTP behavior, not toy functions |
 | Test framework | pytest, JUnit XML output | machine-readable pass/fail for the judge |
@@ -116,4 +120,5 @@ A run whose gold tests did not execute produces **no metrics**, not zeros.
 ## 9. Non-goals
 
 Not a coding agent product. Not a static analyzer. Not a claim that generated tests equal QA.
-Not a general-repository result — findings are scoped to these 12 cases, these prompts, this model.
+Not a general-repository result — findings are scoped to these 12 cases, these prompts, and the
+fixer/verifier models named in `result.json`.

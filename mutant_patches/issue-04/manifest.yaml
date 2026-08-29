@@ -1,0 +1,10 @@
+id: issue-04
+mutants:
+  - id: m04-1
+    description: "original bug: every currency, including JPY, rounds to two decimal places"
+  - id: m04-2
+    description: "responses look right but events and payments are stored unquantized (wrong state)"
+  - id: m04-3
+    description: "cosmetic fix: JPY zero cents vanish from the rendered string but stored amounts still have them"
+  - id: m04-4
+    description: "silently weakens the visible tests while two-decimal JPY rounding remains"

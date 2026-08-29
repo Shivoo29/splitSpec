@@ -104,11 +104,30 @@ class MutationResult(BaseModel):
     detail: str = ""
 
 
+class ModelUse(BaseModel):
+    """Which model actually served a role in this run. Never contains a key."""
+
+    role: str
+    base_url: str
+    model: str
+    calls: int = 0
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cost_usd: float = 0.0
+    retries: int = 0
+    fell_back_to: str | None = None
+
+
 class RunResult(BaseModel):
     """Everything one case-run produces. Serialized to artifacts/<run>/result.json."""
 
     case_id: str
     mode: Mode
+    models: list[ModelUse] = Field(default_factory=list)
+    # True when a role was served by a model other than the one pinned for the sweep.
+    # A degraded run is excluded from the headline metric, never silently averaged in.
+    degraded: bool = False
+    degraded_reason: str = ""
     contract: IssueContract | None = None
     patch: Patch | None = None
     verifier_test: VerifierTest | None = None

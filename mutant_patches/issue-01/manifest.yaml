@@ -1,0 +1,10 @@
+id: issue-01
+mutants:
+  - id: m01-1
+    description: "original bug: create_event accepts an empty title, zero capacity, and negative prices"
+  - id: m01-2
+    description: "partial fix: title length and capacity bounds restored, but negative prices are still accepted"
+  - id: m01-3
+    description: "returns 422 for invalid input but only after the event row has already been persisted"
+  - id: m01-4
+    description: "silently weakens the visible tests while production still accepts invalid input"

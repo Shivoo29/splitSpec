@@ -1,0 +1,15 @@
+id: issue-05
+title: Cross-user ticket access
+issue_text: |
+  I can view other people's tickets. When I request a ticket that one of my
+  teammates was issued, the API returns its full details instead of refusing
+  me. I was able to read the code of a co-worker's ticket by guessing its id,
+  which means ticket barcodes are effectively public. Each user should only be
+  able to read tickets issued to them.
+fixture: eventpulse
+buggy_files: [app/routes/tickets.py]
+visible_tests: [visible_tests/issue-05]
+gold_tests: [gold_hidden_tests/issue-05]
+mutants: [mutant_patches/issue-05]
+tags: [authz, access-control]
+expect_escalation: false

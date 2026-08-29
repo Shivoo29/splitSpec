@@ -1,8 +1,9 @@
 """Payment endpoint: charge with an Idempotency-Key header."""
 from __future__ import annotations
 
-from app.models import Payment
 from sqlalchemy import func, select
+
+from app.models import Payment
 
 
 def _headers(auth_headers, token: str, key: str) -> dict:

@@ -1,0 +1,15 @@
+id: issue-01
+title: Null / empty-value validation
+issue_text: |
+  When I create an event through our public API it succeeds even for data that
+  should never be allowed. I just created an event with an empty title and
+  another with a negative ticket price, and both came back as created and now
+  show up in the event listing. Our frontend depends on the API rejecting
+  these before they exist, so I am worried bad data is piling up.
+fixture: eventpulse
+buggy_files: [app/routes/events.py]
+visible_tests: [visible_tests/issue-01]
+gold_tests: [gold_hidden_tests/issue-01]
+mutants: [mutant_patches/issue-01]
+tags: [validation, input-processing]
+expect_escalation: false
