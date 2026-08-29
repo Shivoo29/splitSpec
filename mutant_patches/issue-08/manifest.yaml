@@ -1,0 +1,12 @@
+id: issue-08
+mutants:
+  - id: m08-1
+    description: "original bug: creates payment before checking idempotency key, allowing duplicates on retry"
+  - id: m08-2
+    description: "obvious-path-only fix: checks key before creating but only per-user, allows cross-user duplicates"
+  - id: m08-3
+    description: "sequential-only fix: uses SELECT FOR UPDATE which SQLite doesn't fully support for concurrency"
+  - id: m08-4
+    description: "returns right value (200 for replay) but wrong state (creates duplicate payment row)"
+  - id: m08-5
+    description: "weakens-the-test fix: visible test only checks 201, ignores idempotency replay behavior"

@@ -1,0 +1,15 @@
+id: issue-08
+title: Retry causes duplicate side effect
+issue_text: |
+  When a payment request times out and the client retries with the same
+  Idempotency-Key, sometimes two payments are created instead of one.
+  The retry should be idempotent - same key means same payment. But we're
+  seeing duplicate charges on the bank side. The Idempotency-Key header
+  is supposed to prevent this but it seems like the check happens too late.
+fixture: eventpulse
+buggy_files: [app/models.py, app/routes/payments.py]
+visible_tests: [visible_tests/issue-08]
+gold_tests: [gold_hidden_tests/issue-08]
+mutants: [mutant_patches/issue-08]
+tags: [idempotency, payments]
+expect_escalation: false

@@ -1,0 +1,10 @@
+id: issue-10
+mutants:
+  - id: m01-original-bug
+    description: the seeded defect unchanged, bankers rounding on every amount
+  - id: m02-obvious-path-only
+    description: special-cases the one amount from the report and rounds the rest half-even
+  - id: m03-right-value-wrong-state
+    description: rounds correctly on render but stores the half-even value
+  - id: m04-weakens-the-test
+    description: production code unchanged; the visible test's expectations are edited to match

@@ -1,0 +1,8 @@
+id: issue-11
+mutants:
+  - id: m01-hard-deletes-on-cancel
+    description: guesses that cancel should delete the row, which loses history
+  - id: m02-hides-cancelled-from-list
+    description: guesses the report meant cancelled rows should be hidden from the list
+  - id: m03-auto-reconfirms
+    description: guesses registrations should be restored automatically, weakening cancel

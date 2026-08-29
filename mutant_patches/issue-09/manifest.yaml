@@ -1,0 +1,10 @@
+id: issue-09
+mutants:
+  - id: m01-original-bug
+    description: the seeded defect unchanged, no invalidation on event creation
+  - id: m02-obvious-path-only
+    description: invalidates only the single-event cache key, leaving every list page stale
+  - id: m03-right-value-wrong-state
+    description: returns a fresh payload from the write path but never clears the cache
+  - id: m04-weakens-the-test
+    description: disables the cache read entirely instead of invalidating on write

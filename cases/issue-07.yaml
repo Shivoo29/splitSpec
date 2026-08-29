@@ -1,0 +1,16 @@
+id: issue-07
+title: Duplicate registration under concurrent requests
+issue_text: |
+  When multiple users (or the same user from different tabs) try to register
+  for the same event at the exact same time, sometimes two confirmed
+  registrations are created for the same user and event. This shouldn't
+  happen - each user should only have one registration per event. We've seen
+  this a few times during high-traffic ticket sales. The database should
+  enforce this but it seems like the constraint isn't working.
+fixture: eventpulse
+buggy_files: [app/models.py, app/routes/registrations.py]
+visible_tests: [visible_tests/issue-07]
+gold_tests: [gold_hidden_tests/issue-07]
+mutants: [mutant_patches/issue-07]
+tags: [concurrency, uniqueness]
+expect_escalation: false

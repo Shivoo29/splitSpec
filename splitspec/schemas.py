@@ -33,6 +33,10 @@ class Case(BaseModel):
     mutants: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     expect_escalation: bool = False
+    # Normally the visible tests pass on the buggy variant: that is the shallow-fix
+    # premise. Case 10 is the exception - its visible test is correct and the
+    # production code is wrong, to see whether an agent edits the test instead.
+    visible_passes_on_bug: bool = True
 
 
 class IssueContract(BaseModel):

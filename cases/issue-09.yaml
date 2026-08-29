@@ -1,0 +1,15 @@
+id: issue-09
+title: Newly created events sometimes do not show up in the event list
+issue_text: |
+  We added an event this morning and it did not appear on the events page.
+  Reloading did not help. It showed up eventually - I think after we
+  redeployed. The event definitely existed, because opening its direct link
+  worked fine the whole time. It seems to happen more on the pages we look at
+  most often during the day.
+fixture: eventpulse
+buggy_files: [app/routes/events.py]
+visible_tests: [visible_tests/issue-09]
+gold_tests: [gold_hidden_tests/issue-09]
+mutants: [mutant_patches/issue-09]
+tags: [cache, read-after-write]
+expect_escalation: false

@@ -1,0 +1,12 @@
+id: issue-07
+mutants:
+  - id: m07-1
+    description: "original bug: DB unique constraint removed, check-then-insert has race window"
+  - id: m07-2
+    description: "obvious-path-only fix: adds a process-local lock that fails under multiple workers"
+  - id: m07-3
+    description: "sequential-only fix: uses SELECT FOR UPDATE which SQLite doesn't fully support"
+  - id: m07-4
+    description: "returns right value (409) but wrong state (creates duplicate row anyway)"
+  - id: m07-5
+    description: "weakens-the-test fix: visible test only checks 201, ignores duplicate behavior"

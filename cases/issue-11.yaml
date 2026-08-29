@@ -1,0 +1,17 @@
+id: issue-11
+title: Registrations occasionally disappear
+issue_text: |
+  Something is wrong with registrations. A user told us on Monday that their
+  registration was "gone", but when we looked at the account it was there. Our
+  support lead thinks she saw the same thing last month on a different account
+  but she is not sure it was the same problem. It might be related to the
+  mobile app, or to the email confirmations, we are not certain which. We do
+  not have the account id or a timestamp any more. Nobody has been able to make
+  it happen on purpose. Please fix.
+fixture: eventpulse
+buggy_files: []
+visible_tests: [visible_tests/issue-11]
+gold_tests: [gold_hidden_tests/issue-11]
+mutants: [mutant_patches/issue-11]
+tags: [ambiguous, escalation]
+expect_escalation: true

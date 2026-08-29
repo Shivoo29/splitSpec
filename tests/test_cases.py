@@ -14,6 +14,7 @@ no Docker so the plain unit suite can exercise it.
 """
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -28,6 +29,21 @@ from splitspec.schemas import Case
 FIXTURE = ROOT / "fixtures" / "eventpulse"
 CASES = sorted((ROOT / "cases").glob("issue-*.yaml"))
 CASE_IDS = [c.stem for c in CASES]
+
+
+_SUMMARY = re.compile(r"(?:(\d+) failed)?(?:, )?(?:(\d+) passed)?(?:, )?(?:(\d+) error)?")
+
+
+def _outcome(stdout: str) -> tuple[int, int]:
+    """Return (failed, errors) parsed from pytest's summary line."""
+    failed = errors = 0
+    for line in stdout.splitlines():
+        for count, word in re.findall(r"(\d+) (failed|error|errors)", line):
+            if word.startswith("error"):
+                errors = max(errors, int(count))
+            else:
+                failed = max(failed, int(count))
+    return failed, errors
 
 
 def load_case(path: Path) -> Case:
@@ -57,7 +73,14 @@ def _materialize(ws: Path, case: Case, overlay_bug: bool, tests_src: Path) -> Pa
     shutil.copytree(FIXTURE / "app", ws / "app")
     for name in ("seed.py", "conftest.py"):
         shutil.copy2(FIXTURE / name, ws / name)
-    (ws / "pytest.ini").write_text("[pytest]\nasyncio_mode = auto\n")
+    (ws / "pytest.ini").write_text(
+        "[pytest]\nasyncio_mode = auto\nnorecursedirs = visible_tests\n"
+    )
+    # A real workspace always contains the repository's own visible tests. Case 10's
+    # oracle checks that they were not edited, so they must be present but not
+    # collected here - only the suite under test runs.
+    for entry in case.visible_tests:
+        shutil.copytree(ROOT / entry, ws / entry, dirs_exist_ok=True)
     if overlay_bug:
         for rel in case.buggy_files:
             src = FIXTURE / "bugs" / case.id / rel
@@ -84,15 +107,29 @@ def test_visible_passes_on_buggy_variant(case_file, tmp_path):
     case = load_case(case_file)
     ws = _materialize(tmp_path / "ws", case, overlay_bug=True, tests_src=ROOT / case.visible_tests[0])
     result = _run_pytest(ws)
-    assert result.returncode == 0, result.stdout + result.stderr
+    if not case.buggy_files or case.visible_passes_on_bug:
+        assert result.returncode == 0, result.stdout + result.stderr
+    else:
+        # The inverted case: a correct visible test that the defect breaks.
+        assert result.returncode != 0, "this case's visible test must fail on the bug"
+        assert result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("case_file", CASES, ids=CASE_IDS)
 def test_gold_fails_on_buggy_variant(case_file, tmp_path):
     case = load_case(case_file)
+    if not case.buggy_files:
+        pytest.skip("no buggy variant: this case's oracle asserts nothing changed")
     ws = _materialize(tmp_path / "ws", case, overlay_bug=True, tests_src=ROOT / case.gold_tests[0])
     result = _run_pytest(ws)
-    assert result.returncode != 0, "gold tests must fail on the buggy variant:\n" + result.stdout
+    failed, errors = _outcome(result.stdout)
+    report = result.stdout + result.stderr
+    # A non-zero exit code is not enough: an import error, a syntax error, or a
+    # collection crash would satisfy it while proving nothing about the defect.
+    assert errors == 0, "gold tests errored instead of failing:\n" + report
+    assert failed >= 1, "gold tests must FAIL on the buggy variant:\n" + report
+    for bad in ("ImportError", "SyntaxError", "ModuleNotFoundError", "INTERNALERROR"):
+        assert bad not in report, f"gold suite did not run cleanly ({bad}):\n" + report
 
 
 @pytest.mark.parametrize("case_file", CASES, ids=CASE_IDS)
