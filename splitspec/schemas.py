@@ -6,7 +6,7 @@ listed in docs/LLD.md that consume it.
 """
 from __future__ import annotations
 
-from enum import Enum
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 Mode = Literal["baseline", "splitspec"]
 
 
-class Confidence(str, Enum):
+class Confidence(StrEnum):
     low = "low"
     medium = "medium"
     high = "high"

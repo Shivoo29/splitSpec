@@ -32,7 +32,7 @@ class Settings:
     sandbox_network: str = "none"
 
     @classmethod
-    def from_env(cls) -> "Settings":
+    def from_env(cls) -> Settings:
         return cls(
             api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
             model=os.environ.get("SPLITSPEC_MODEL", cls.model),
