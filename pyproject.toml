@@ -9,6 +9,12 @@ testpaths = ["tests"]
 # schemas.TestRun is a pydantic model, not a test class
 python_classes = ["Test*Case"]
 asyncio_mode = "auto"
+# The plain unit suite never touches Docker: docker-backed tests must be
+# deselected by default and run explicitly with `pytest -m docker`.
+markers = [
+    "docker: requires a running Docker daemon and the splitspec-sandbox image",
+]
+addopts = "-m 'not docker'"
 
 [tool.ruff]
 line-length = 110
