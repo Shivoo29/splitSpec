@@ -35,6 +35,8 @@ real configured providers before being called done.
 | 429 aborted the sweep | single-key 429 must back off, not raise |
 | Fixer patch contained `sandbox.jsonl` | run artifacts were written inside the workspace |
 | `touched_tests` on a legitimate patch | adding a test was conflated with editing one |
+| Fixer silently ran on an undeclared model | provider answered a retired id with HTTP 200 served by a SUBSTITUTE model, not 404; check `GET /models` at startup and compare the served `model` field against the one requested |
+| Free-tier 429 mid-run | the substitute was a premium model with tighter limits; pin an exact version (`devstral-2512`), never a `-latest` alias |
 | Resume skipped the pairs that failed | error `result.json` still validated as a `RunResult`; check the failure marker BEFORE validating |
 | Verifier test passed on the buggy code | `asyncio.gather` over one event loop serializes ASGI requests — no real concurrency, so no race to catch |
 

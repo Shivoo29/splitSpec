@@ -46,12 +46,53 @@ def _assert_configured(settings: Settings, mode: Mode) -> None:
         )
 
 
+def assert_models_exist(settings: Settings, mode: Mode) -> None:
+    """Fail fast when a pinned model id is not one the provider actually serves.
+
+    Checking the id is not paranoia and GET /models is not optional: Mistral
+    answered a request for the retired `devstral-small-latest` with HTTP 200 served
+    by `mistral-medium-3-5` rather than a 404. A silent substitution is worse than
+    an error, because the run completes and records the model we ASKED for, so the
+    result table names a model that never ran. The whole experiment is a comparison
+    between models; a mislabelled row invalidates it.
+    """
+    import httpx
+
+    roles = ("contract", "fixer") if mode == "baseline" else ("contract", "fixer", "verifier")
+    for role in roles:
+        provider = settings.provider(role)
+        try:
+            response = httpx.get(
+                provider.base_url.rstrip("/") + "/models",
+                headers={"Authorization": f"Bearer {provider.api_keys[0]}"},
+                timeout=30,
+            )
+            response.raise_for_status()
+            # Google's OpenAI-compatible endpoint lists ids as "models/<id>";
+            # everyone else lists the bare id. Accept either spelling.
+            served = set()
+            for entry in response.json().get("data", []):
+                model_id = entry.get("id") or ""
+                served.add(model_id)
+                served.add(model_id.removeprefix("models/"))
+        except Exception as exc:  # noqa: BLE001 - an unlistable provider is not fatal
+            print(f"WARN: could not list models for {role} ({exc}); skipping the id check")
+            continue
+        if served and provider.model not in served:
+            raise RuntimeError(
+                f"{role} model {provider.model!r} is not served by {provider.base_url}. "
+                "Some providers silently substitute another model instead of "
+                f"returning 404, which would mislabel the run. Available: {sorted(served)}"
+            )
+
+
 def run_case(case: Case, mode: Mode, output: Path, settings: Settings | None = None) -> RunResult:
     """Execute one case/mode and return the written :class:`RunResult`."""
     if settings is None:
         load_dotenv()
         settings = Settings.from_env()
     _assert_configured(settings, mode)
+    assert_models_exist(settings, mode)
 
     def make_client(provider):
         return OpenAICompatibleClient(
