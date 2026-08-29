@@ -13,3 +13,4 @@ trajectories/*
 !trajectories/.gitkeep
 *.db
 *.sqlite3
+&1

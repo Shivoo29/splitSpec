@@ -22,7 +22,8 @@ from splitspec.schemas import Case, Confidence, IssueContract
 from splitspec.trace import Trace
 
 PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "contract.md"
-_DEFAULT_MAX_TOKENS = 1500
+# Contracts run long: a truncated reply is invalid JSON, not a model failure.
+_DEFAULT_MAX_TOKENS = 4000
 
 
 class ContractError(RuntimeError):
@@ -120,9 +121,23 @@ def build_contract(
     return contract
 
 
+def _strip_code_fence(text: str) -> str:
+    """Return the JSON body of a fenced reply.
+
+    Real models routinely wrap structured output in ```json ... ``` even when asked
+    not to. Refusing that is refusing a correct answer over its packaging.
+    """
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+    without_open = stripped.split("\n", 1)[1] if "\n" in stripped else ""
+    closing = without_open.rfind("```")
+    return (without_open[:closing] if closing != -1 else without_open).strip()
+
+
 def _parse_completion(case: Case, text: str, model: str) -> IssueContract:
     try:
-        data = json.loads(text)
+        data = json.loads(_strip_code_fence(text))
     except json.JSONDecodeError as exc:
         raise ContractError(
             f"contract builder: model ({model or 'unknown'}) returned non-JSON output"

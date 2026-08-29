@@ -26,6 +26,20 @@ Rules
   "medium" when most is clear but some details are uncertain; "low" when the
   report cannot support a confident invariant — that case must also fill
   "ambiguities".
+- "confidence" MUST be "low" if ANY of these is true, no matter how plausible a
+  guess you could make:
+    * the report describes no deterministic way to reproduce the behavior, or
+      says nobody has been able to reproduce it on purpose;
+    * the reporter is unsure of what they saw, or is relaying a second-hand or
+      remembered account;
+    * the identifying details needed to investigate (account, record id,
+      timestamp, endpoint, environment) are absent;
+    * the text supports two or more incompatible readings of what is wrong.
+  Being able to write a sensible-sounding invariant is NOT evidence that the
+  report supports one. When the report cannot tell you what the correct
+  behavior is, the honest contract is a low-confidence one that asks. A
+  confident contract built on a guess sends someone to change code for a
+  defect nobody has demonstrated exists.
 
 Respond with exactly one JSON object, no prose outside it, conforming to:
 

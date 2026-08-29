@@ -277,3 +277,42 @@ def test_legitimate_contract_mentioning_behavior_is_not_refused():
     )
     assert result.invariants
     assert result.case_id == "issue-12"
+
+
+def test_single_key_429_backs_off_instead_of_raising():
+    """A free tier with one key rate-limits constantly. That must retry, not abort."""
+    slept: list[float] = []
+    calls: list[int] = []
+
+    def transport(url, headers, payload):
+        calls.append(1)
+        if len(calls) < 3:
+            return 429, {"error": {"message": "rate limit"}}
+        return 200, {
+            "choices": [{"message": {"content": "hi"}}],
+            "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+            "model": "m",
+        }
+
+    client = OpenAICompatibleClient(
+        Provider("fixer", "https://example.invalid/v1", "m", ["only-key"]),
+        max_retries=5,
+        retry_base_delay_sec=1,
+        transport=transport,
+        sleep=slept.append,
+    )
+    assert client.complete(system="s", messages=[{"role": "user", "content": "u"}]).text == "hi"
+    assert len(calls) == 3
+    assert slept == [1, 2], f"expected exponential backoff between attempts, got {slept}"
+
+
+def test_persistent_429_eventually_raises():
+    client = OpenAICompatibleClient(
+        Provider("fixer", "https://example.invalid/v1", "m", ["k"]),
+        max_retries=2,
+        retry_base_delay_sec=1,
+        transport=lambda *a: (429, {}),
+        sleep=lambda _: None,
+    )
+    with pytest.raises(RuntimeError, match="429"):
+        client.complete(system="s", messages=[{"role": "user", "content": "u"}])
