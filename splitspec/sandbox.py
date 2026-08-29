@@ -34,8 +34,10 @@ PYTEST_INI = "[pytest]\nasyncio_mode = auto\nnorecursedirs = visible_tests\n"
 
 # Files and directories never part of the diff/state: build artifacts and
 # runtime databases are incidental, not a fixer's or a mutant's change.
-_IGNORED_BASENAMES = {"__pycache__", ".pytest_cache"}
-_IGNORED_SUFFIXES = {".pyc", ".db", ".sqlite3"}
+# Run artifacts, not anyone's change: a JUnit report or a stray trace must never
+# appear in a patch, or the judge would apply the fixer's own test output.
+_IGNORED_BASENAMES = {"__pycache__", ".pytest_cache", "sandbox.jsonl"}
+_IGNORED_SUFFIXES = {".pyc", ".db", ".sqlite3", ".xml"}
 
 _TIMEOUT_EXIT = 124  # mirrors the `timeout(1)` convention; a timeout is a result, not a crash
 
@@ -165,6 +167,13 @@ class Workspace:
                 added = [body + "\n" for _, hunk in hunks for op, body in hunk if op == "+"]
                 target.write_text("".join(added), encoding="utf-8")
 
+    def baseline_files(self) -> set[str]:
+        """Paths present when the workspace was materialized (after the bug overlay).
+
+        Lets a caller tell a modified file from a newly created one.
+        """
+        return set(self._baseline)
+
     def snapshot_diff(self) -> str:
         """A unified diff of the workspace vs its as-materialized state."""
         current = _walk_state(self.path)
@@ -293,7 +302,10 @@ def _junit_host_path(ws: Workspace, command: list[str]) -> str | None:
 
 
 def _trace_event(ws, argv, exit_code, duration, stdout, stderr) -> None:
-    trace = Trace(ws.path / "sandbox.jsonl")
+    # Beside the workspace, never inside it. A trace written into the tree lands in
+    # every snapshot_diff (so the fixer's patch carries its own exec log), and in a
+    # judge workspace it would hold gold-test output where an agent could read it.
+    trace = Trace(ws.path.parent / f"{ws.path.name}.sandbox.jsonl")
     tail = (stdout + "\n" + stderr).strip().splitlines()[-40:]
     trace.event(
         "sandbox",
