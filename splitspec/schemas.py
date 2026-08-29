@@ -92,11 +92,16 @@ class TestRun(BaseModel):
 
 
 class ValidityGate(BaseModel):
-    """Did the generated test earn the right to grade a patch?"""
+    """Did the generated test earn the right to grade a patch?
 
-    compiles: bool = False
-    runs: bool = False
-    fails_on_original_bug: bool = False
+    The three boolean fields are None (not False) when the gate could not run —
+    e.g. case 11 has no buggy variant, so there is nothing for a test to catch and
+    no measurement exists. Missing data is None, never zero (ground rule 8).
+    """
+
+    compiles: bool | None = None
+    runs: bool | None = None
+    fails_on_original_bug: bool | None = None
     passed: bool = False
     reason: str = ""
 

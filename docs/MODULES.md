@@ -1,13 +1,51 @@
-# Module Prompts & Commit Messages
+# Module Prompts, Verification & Commit Messages
 
-How to use this file:
+How to use this file, per module:
 
-1. Copy the **Prompt** block for the next module into opencode.
-2. When it reports done, come back here and tell me `module N done` — I review the code for bugs
-   and actually run its checks.
-3. After my review passes, use the **Commit** block.
+1. Copy the **Prompt** block into opencode.
+2. When it reports done, run the **Verify** block yourself. Do not trust the report —
+   every module so far passed its own tests while carrying a real bug that only the
+   verification found.
+3. If verification is clean, commit with the **Commit** block.
 
-Every prompt assumes the agent reads `AGENTS.md`, `docs/HLD.md`, and `docs/LLD.md` first.
+Modules 0–6 are done. Their prompts are kept for reference.
+
+---
+
+## Hard-won findings — read before writing any module
+
+Each of these cost real debugging time. They recur.
+
+**A mocked client validates nothing about a provider.** `FakeClient` accepts any
+transcript, any message order, any token budget. Every module that touched the network
+passed its full unit suite while broken. Modules 7 onward must be exercised against the
+real configured providers before being called done.
+
+**Live problems found so far, all invisible to unit tests:**
+
+| Symptom | Cause |
+|---|---|
+| `CERTIFICATE_VERIFY_FAILED` on every call | stdlib `urllib` ignores certifi in a venv → use `httpx` |
+| `HTTP 404 model_not_found` | model id was never verified; always call `GET /models` first |
+| `HTTP 503` under load | floating alias (`gemini-flash-latest`); pin exact versions |
+| "model returned non-JSON output" | reply was **truncated**, not malformed — raise `max_tokens` |
+| Contract parse failure | model wrapped JSON in ```` ```json ```` fences regardless of instructions |
+| `HTTP 413 … TPM Limit 8000` | whole run budget passed as per-reply `max_tokens` |
+| `HTTP 400 missing thought_signature` | assistant message was rebuilt instead of replayed verbatim |
+| 429 aborted the sweep | single-key 429 must back off, not raise |
+| Fixer patch contained `sandbox.jsonl` | run artifacts were written inside the workspace |
+| `touched_tests` on a legitimate patch | adding a test was conflated with editing one |
+
+**Provider limits that shape design:** Groq free tier is 8,000 TPM — fine for a single
+contract call, unusable for an agent loop. Gemini and Mistral both handle agent loops.
+Cerebras caps free context at 8,192 tokens, which no agent turn fits in.
+
+**Two rules that came out of the case work:**
+
+- Never assert on the buggy symbol itself. Gold defines ground truth, so a white-box
+  assertion there rejects a correct fix and corrupts every metric downstream.
+- A non-zero exit code is not a test failure. Parse the outcome; an import error must
+  never count as "caught the bug".
 
 ---
 
@@ -247,39 +285,81 @@ the run if gold tests or verifier artifacts are visible to it.
 
 ---
 
+
 ## Module 7 — Verifier agent, freeze, validity gate
 
 **Prompt**
 ```
-Read AGENTS.md, docs/HLD.md, and docs/LLD.md first. Implement Module 7 only.
+Read AGENTS.md, docs/HLD.md, docs/LLD.md, and the "Hard-won findings" section of
+docs/MODULES.md first. Implement Module 7 only.
 
-Write splitspec/agents/verifier.py, splitspec/prompts/verifier.md, splitspec/freeze.py, and
-splitspec/gate.py per docs/LLD.md "Module 7".
+Write splitspec/agents/verifier.py, splitspec/prompts/verifier.md, splitspec/freeze.py,
+splitspec/gate.py, and tests. Modules 3-6 are done: reuse sandbox.materialize,
+tools.run_agent, and the Module 6 fixer as the structural model. Do not modify them.
 
-- System prompt is the Independent Verifier Agent instruction from docs/PROJECT.md §12. It returns
-  test file contents, run command, the behavioral invariant in plain language, assumptions, and a
-  confidence level -> schemas.VerifierTest.
-- The verifier runs on its OWN workspace at the buggy pre-patch state. Assert at entry that no
-  patch, fixer artifact, or gold test is reachable from it.
-- freeze(verifier_test, artifact_dir) writes the test file, records frozen_sha256, and makes it
-  read-only. load_frozen() re-checks the hash and raises on mismatch.
-- gate(frozen_test, case) runs the test against the ORIGINAL BUGGY code and fills schemas.ValidityGate:
-  compiles, runs, fails_on_original_bug. passed = all three. A test that passes on the buggy code is
-  invalid; record the reason and exclude it from acceptance metrics (it still counts in the
-  validity-rate denominator).
+  def run_verifier(contract, case, workspace, client, settings, trace) -> VerifierTest
+  def freeze(test: VerifierTest, artifact_dir: Path) -> VerifierTest
+  def load_frozen(artifact_dir: Path) -> VerifierTest
+  def gate(frozen: VerifierTest, case: Case, root: Path, trace) -> ValidityGate
 
-Write tests: freeze detects a tampered file; a test that passes on the bug is gated invalid with a
-reason; a test that fails on the bug is gated valid; the entry isolation assertion fires when a
-fixer patch is planted. Run them and paste the output.
+- The system prompt is the Independent Verifier Agent instruction from docs/PROJECT.md
+  section 12. It returns the test file contents, a run command, the behavioral invariant in
+  plain language, assumptions, and a confidence level.
+- The verifier runs on its OWN workspace at the buggy pre-patch state. Assert at entry that
+  no patch, fixer artifact, or gold test is reachable — mirror _assert_no_gold_or_verifier
+  in agents/fixer.py, inverted.
+- freeze() writes verifier_test.py into the artifact dir, records frozen_sha256, and makes
+  the file read-only. load_frozen() re-checks the hash and raises on mismatch.
+- gate() runs the frozen test against the ORIGINAL BUGGY code in a fresh sandbox workspace
+  and fills ValidityGate: compiles, runs, fails_on_original_bug. passed = all three.
+  A test that PASSES on the buggy code is invalid — record the reason. It still counts in
+  the validity-rate denominator, so do not discard it.
+- Parse the gate outcome from the run, not from the exit code: an ImportError or a
+  collection crash is "did not compile/run", NOT "caught the bug". tests/test_cases.py has
+  the outcome parser to copy.
+- Case 11 has no buggy variant. gate() must handle that case without pretending the test
+  failed on a bug that does not exist.
+
+Tests, FakeClient only:
+- a scripted verifier produces a valid VerifierTest with invariant and confidence
+- freeze then tamper then load_frozen raises on the hash mismatch
+- a test that passes on the buggy code is gated invalid WITH a reason
+- a test that fails on the buggy code is gated valid
+- a test that cannot import is gated invalid as "did not run", not as valid
+- planting a fixer patch or a gold test in the verifier workspace fires the entry assertion
+- the verifier receives the identical contract object the fixer received
+- one @pytest.mark.docker test: gate a real hand-written test for issue-01 end to end
+
+Run the unit suite, the docker suite, and ruff. Paste all output. No git commands.
 ```
+
+**Verify (run these yourself)**
+```bash
+.venv/bin/ruff check . && .venv/bin/python -m pytest -q && .venv/bin/python -m pytest -q -m docker
+```
+Then the live check — this is the one that matters. Write a script that, for issue-07,
+builds the contract, runs the verifier against a materialized buggy workspace with the real
+configured verifier model, freezes the test, and gates it. Confirm from the output that:
+
+- the generated test file actually imports and runs (not just that a file was produced),
+- `fails_on_original_bug` is True for a genuine test and the gate rejects a test that passes,
+- the invariant it states resembles "at most one registration per (user, event)",
+- the frozen sha256 changes if you edit the file, and `load_frozen` then raises,
+- no gold test path appears anywhere in the verifier's trace: `grep -c gold_hidden trace.jsonl`
+  must be 0.
+
+Watch for: a verifier that writes a test which passes on the bug (invalid but plausible),
+and a verifier that reads its own sandbox output rather than reasoning from the issue.
 
 **Commit**
 ```
 feat(verifier): generate, freeze, and gate independent behavioral tests
 
-Verifier writes tests from the pre-patch repository only. Tests are hashed
-and frozen before any patch is judged, then must compile, run, and fail on
-the original bug before they are allowed to grade anything.
+Verifier writes tests from the pre-patch repository only, on a workspace
+that asserts no patch or gold test is reachable. Tests are hashed and
+frozen before any patch is judged, then must compile, run, and fail on
+the original bug before they may grade anything; a test that passes on
+the bug is recorded invalid with its reason rather than discarded.
 ```
 
 ---
@@ -288,31 +368,61 @@ the original bug before they are allowed to grade anything.
 
 **Prompt**
 ```
-Read AGENTS.md, docs/HLD.md, and docs/LLD.md first. Implement Module 8 only.
+Read AGENTS.md, docs/HLD.md, docs/LLD.md, and the "Hard-won findings" section of
+docs/MODULES.md first. Implement Module 8 only.
 
-Write splitspec/judge.py per docs/LLD.md "Module 8".
+Write splitspec/judge.py and tests/test_judge.py per docs/LLD.md "Module 8".
 
-judge(case, patch, frozen_verifier_test | None, mode) -> dict of schemas.TestRun.
+  def judge(case, patch, frozen_verifier_test | None, mode, root, trace) -> dict[str, TestRun]
+
 - Materialize a fresh judge workspace, apply the bug, apply the patch.
-- Run visible tests. Then, in splitspec mode with a VALID gated test, run the frozen verifier test.
-- Run gold tests LAST, in a separate container invocation with /gold mounted. Gold results must
-  never be written anywhere an agent workspace can read.
+- Run visible tests. Then, in splitspec mode and only when the gate marked the test VALID,
+  run the frozen verifier test.
+- Run gold tests LAST, in a SEPARATE container invocation with /gold mounted read-only.
 - Load the frozen verifier test through freeze.load_frozen() so tampering is caught here too.
-- The judge calls no model and makes no inferences. It records commands, exit codes, counts,
-  durations, output tails, and JUnit XML paths.
+- The judge calls no model and infers nothing. It records commands, exit codes, counts,
+  durations, output tails, and JUnit XML paths into schemas.TestRun.
 
-Write tests/test_judge.py: for issue-07's buggy code, visible passes and gold fails; for the
-reference fix, all three pass; a tampered frozen test aborts the judge. Mark Docker-dependent tests
-with @pytest.mark.docker. Run them and paste the output.
+Isolation requirements, each asserted in code:
+- gold results must never be written into a path an agent workspace can read. Note that
+  sandbox traces are written BESIDE the workspace for exactly this reason; do not undo that.
+- run_in_sandbox must receive the /gold mount ONLY for the gold invocation.
+- the visible and verifier invocations must not have /gold mounted.
+
+Tests:
+- @pytest.mark.docker: issue-07 buggy code -> visible passes, gold fails
+- @pytest.mark.docker: issue-07 with the reference fix -> all three pass
+- a tampered frozen test aborts the judge
+- an invalid-gated verifier test is skipped, not run
+- gold mount is absent from the visible and verifier invocations (assert on the argv)
+- counts come from JUnit XML, not stdout
+
+Run the unit suite, the docker suite, and ruff. Paste all output. No git commands.
 ```
+
+**Verify (run these yourself)**
+```bash
+.venv/bin/ruff check . && .venv/bin/python -m pytest -q && .venv/bin/python -m pytest -q -m docker
+```
+Then the parity check that matters most. For all 12 cases, run the judge on the *unpatched*
+buggy code and confirm the outcome matches `tests/test_cases.py`:
+
+- visible passes for every case except 10 (inverted) — case 11 has no bug so it also passes,
+- gold FAILS for every case with a buggy variant, and passes for case 11,
+- `errors == 0` everywhere. A gold suite that errors is not catching anything.
+
+A mismatch here means every measurement from Module 11 onward is meaningless, so do not
+proceed past a mismatch. Also grep the judge's argv trace and confirm `/gold` appears in
+exactly one invocation per case.
 
 **Commit**
 ```
 feat(judge): add neutral execution of visible, verifier, and gold suites
 
-Deterministic runner that applies the patch to a fresh workspace and
-reports each suite's outcome without inference. Gold tests execute last in
-their own container and never touch an agent-readable path.
+Applies the patch to a fresh workspace and reports each suite's outcome
+without inference. Gold tests execute last in their own container with a
+read-only mount and never touch an agent-readable path; the frozen
+verifier test is re-hashed before it is allowed to run.
 ```
 
 ---
@@ -321,37 +431,79 @@ their own container and never touch an agent-readable path.
 
 **Prompt**
 ```
-Read AGENTS.md, docs/HLD.md, and docs/LLD.md first. Implement Module 9 only.
+Read AGENTS.md, docs/HLD.md, docs/LLD.md, and the "Hard-won findings" section of
+docs/MODULES.md first. Implement Module 9 only.
 
-Write splitspec/graph.py, splitspec/run.py, and splitspec/evaluate.py per docs/LLD.md "Module 9".
+Write splitspec/graph.py, splitspec/run.py, splitspec/evaluate.py, and tests per
+docs/LLD.md "Module 9". Modules 3-8 are done; wire them, do not reimplement them.
 
-- RunState TypedDict carries case, mode, contract, patch, verifier_test, validity, runs, trace,
-  cost, timings.
+- RunState TypedDict carries case, mode, contract, patch, verifier_test, validity, runs,
+  trace, cost, timings, models, degraded.
 - Two graphs over the same nodes:
-  baseline: contract -> fixer -> judge -> report
-  splitspec: contract -> (fixer || verifier in parallel) -> freeze -> gate -> judge -> mutation -> report
-- The parallel branches must not share workspaces or state; they join only at freeze. Add an
-  explicit test asserting the fixer node never observes verifier state.
+    baseline : contract -> fixer -> judge -> report
+    splitspec: contract -> (fixer || verifier) -> freeze -> gate -> judge -> mutation -> report
+- The parallel branches must not share a workspace or state and join only at freeze. Add an
+  explicit test asserting the fixer node never observes verifier state and vice versa.
 - CLI via typer, exactly these invocations:
     python -m splitspec.run --mode {baseline,splitspec} --case cases/issue-07.yaml --output artifacts/issue-07-splitspec
     python -m splitspec.evaluate --cases cases/ --modes baseline,splitspec --output artifacts/evaluation-results.json
-- evaluate runs cases sequentially by default (--parallel N allowed, default 1) and is resumable:
-  skip a case whose result.json is complete unless --force.
-- Each run writes the full artifact set from docs/PROJECT.md §13: issue_contract.yaml,
-  fixer_patch.diff, verifier_test.py, visible_tests.txt, verifier_tests.txt, gold_hidden_tests.txt,
-  mutation_results.json, trajectory.jsonl, review_packet.md (stub until Module 11), result.json.
+- evaluate runs cases sequentially by default (--parallel N allowed, default 1) and is
+  RESUMABLE: a case whose result.json is complete is skipped unless --force. Resumability is
+  the answer to a provider's daily quota, so it must work — test it explicitly.
+- Every run writes the full artifact set from docs/PROJECT.md section 13, plus result.json
+  carrying schemas.RunResult including the models list and the degraded flag.
+- Record each role's model into RunResult.models via Provider.describe(). Never write a key.
+- A failed case must not abort the sweep: record the failure in that case's result.json and
+  continue. Losing eleven good cases to one provider error is the worst possible outcome.
 
-Write tests using a FakeClient and stubbed sandbox: a full issue-07 run in both modes produces every
-listed artifact; resume skips a completed case; the isolation assertion holds. Run them, paste output.
+Tests, FakeClient and stubbed sandbox where possible:
+- a full issue-07 run in both modes produces every artifact listed in PROJECT.md section 13
+- resume skips a completed case; --force re-runs it
+- the fixer/verifier isolation assertion holds across the parallel branches
+- a case that raises mid-run still writes a result.json and the sweep continues
+- result.json contains both models and no API key
+- one @pytest.mark.docker end-to-end run of a single case with a scripted client
+
+Run the unit suite, the docker suite, and ruff. Paste all output. No git commands.
 ```
+
+**Verify (run these yourself)**
+```bash
+.venv/bin/ruff check . && .venv/bin/python -m pytest -q && .venv/bin/python -m pytest -q -m docker
+
+# the real thing: one live case end to end, both modes
+.venv/bin/python -m splitspec.run --mode baseline  --case cases/issue-07.yaml --output artifacts/issue-07-baseline
+.venv/bin/python -m splitspec.run --mode splitspec --case cases/issue-07.yaml --output artifacts/issue-07-splitspec
+
+ls artifacts/issue-07-splitspec/          # every file from PROJECT.md §13 must exist
+grep -rc "gold_hidden" artifacts/issue-07-splitspec/trajectory.jsonl   # must be 0
+python - <<'EOF'
+import json, pathlib
+r = json.loads(pathlib.Path("artifacts/issue-07-splitspec/result.json").read_text())
+print("models   :", [(m["role"], m["model"]) for m in r["models"]])
+print("degraded :", r["degraded"], r["degraded_reason"])
+print("visible  :", r["visible"] and r["visible"]["passed"])
+print("verifier :", r["verifier"] and r["verifier"]["passed"])
+print("gold     :", r["gold"] and r["gold"]["passed"])
+print("validity :", r["validity"])
+print("cost/time:", r["cost_usd"], r["runtime_sec"])
+EOF
+```
+Then re-run the same command and confirm it **skips** (resume works), and that `--force`
+re-runs it. Expect the whole thing to take several minutes per case; that is normal.
+
+Watch for: an empty patch recorded as a successful fix; `stop_reason=budget` on most cases
+(that means your results measure the budget, not the model — raise it); and gold results
+appearing anywhere in the trajectory.
 
 **Commit**
 ```
 feat(graph): orchestrate baseline and splitspec runs via LangGraph
 
 State graph with parallel, non-communicating fixer and verifier branches
-joining at the freeze step, plus resumable run and evaluate CLIs that emit
-the full per-case artifact set.
+joining at the freeze step, plus resumable run and evaluate CLIs that
+emit the full per-case artifact set and record which model served each
+role. A failing case is recorded and skipped rather than ending the sweep.
 ```
 
 ---
@@ -360,28 +512,56 @@ the full per-case artifact set.
 
 **Prompt**
 ```
-Read AGENTS.md, docs/HLD.md, and docs/LLD.md first. Implement Module 10 only.
+Read AGENTS.md, docs/HLD.md, docs/LLD.md, and the "Hard-won findings" section of
+docs/MODULES.md first. Implement Module 10 only.
 
-Write splitspec/mutation.py per docs/LLD.md "Module 10".
+Write splitspec/mutation.py and tests per docs/LLD.md "Module 10".
 
-- For each mutant in the case's mutant_patches manifest: fresh workspace, apply the mutant, run the
-  frozen verifier test, record schemas.MutationResult with killed = (the test failed on this mutant).
+- For each mutant in mutant_patches/<case>/manifest.yaml: a fresh workspace, apply the
+  mutant overlay (sandbox.apply_overlay handles this, including the .deleted marker that
+  case 12's m04 uses to model deleting the visible suite), run the frozen verifier test,
+  and record schemas.MutationResult with killed = the test FAILED on this mutant.
+- killed must be decided by parsing the run outcome, not the exit code. A mutant that makes
+  the test crash on import has not been "killed" by the test's discrimination — record that
+  distinctly.
 - Compute the mutation score and write mutation_results.json.
 - CLI: python -m splitspec.mutate --case cases/issue-07.yaml --verifier-test <path> --output <json>
 - Load the verifier test through freeze.load_frozen(); a hash mismatch aborts.
-- Mutants run in the same sandbox constraints as everything else, one container per mutant.
+- One container per mutant, same sandbox constraints as everywhere else.
 
-Write tests: a deliberately weak test scores low against issue-07's manifest; the gold test scores
-5/5 on the same manifest; a hash mismatch aborts. Run them and paste the output.
+Tests:
+- a deliberately weak test scores low against issue-07's manifest
+- the case's own gold test scores high on the same manifest (sanity: the manifest is killable)
+- a hash mismatch aborts
+- a mutant that breaks the import is not counted as killed
+- @pytest.mark.docker for the two scoring tests
+
+Run the unit suite, the docker suite, and ruff. Paste all output. No git commands.
 ```
+
+**Verify (run these yourself)**
+```bash
+.venv/bin/ruff check . && .venv/bin/python -m pytest -q && .venv/bin/python -m pytest -q -m docker
+
+# sanity that the manifests are killable at all, using gold as the "perfect" test
+.venv/bin/python -m splitspec.mutate --case cases/issue-07.yaml \
+  --verifier-test gold_hidden_tests/issue-07/test_concurrent_registration.py \
+  --output /tmp/mut-gold.json
+python -c "import json;d=json.load(open('/tmp/mut-gold.json'));print(d)"
+```
+Gold should kill most or all mutants. If gold scores low, the mutants are broken, not the
+verifier — fix the manifest before trusting any mutation score. Then run the same command
+with a deliberately trivial test (`def test_x(): assert True`) and confirm it scores 0.
+Those two runs bracket the metric; without them a mutation score is unreadable.
 
 **Commit**
 ```
 feat(mutation): score verifier tests against known-incorrect variants
 
 Runs each frozen verifier test against the case's mutant manifest and
-reports which incorrect variants it kills, separating tests that merely
-execute from tests with real discriminatory power.
+reports which incorrect variants it kills, separating a test with real
+discriminatory power from one that merely executes. A mutant that breaks
+the import is recorded distinctly rather than counted as killed.
 ```
 
 ---
@@ -390,39 +570,76 @@ execute from tests with real discriminatory power.
 
 **Prompt**
 ```
-Read AGENTS.md, docs/HLD.md, and docs/LLD.md first. Implement Module 11 only.
+Read AGENTS.md, docs/HLD.md, docs/LLD.md, and the "Hard-won findings" section of
+docs/MODULES.md first. Implement Module 11 only.
 
-Write splitspec/metrics.py, splitspec/reporting.py, and
-splitspec/templates/review_packet.md.j2 per docs/LLD.md "Module 11".
+Write splitspec/metrics.py, splitspec/reporting.py,
+splitspec/templates/review_packet.md.j2, and tests per docs/LLD.md "Module 11".
 
 metrics.py implements exactly the formulas in docs/HLD.md section 7:
-false fix detection recall (primary), correct patch acceptance rate, false rejection rate,
-generated test validity rate, mutation score, median runtime and median model cost per issue per mode.
-Missing data returns None with a stated reason. Never substitute 0 for "did not run".
+  false fix detection recall (primary), correct patch acceptance rate, false rejection rate,
+  generated test validity rate, mutation score, median runtime and median model cost per
+  issue per mode.
 
-reporting.py renders review_packet.md matching docs/PROJECT.md section 14 exactly: decision, issue,
-behavioral invariant, candidate patch summary, visible tests, independent verifier test, gold hidden
-evaluator, mutation sensitivity, residual risks, human action. Also writes the result table from
-docs/HLD.md section 7 into evaluation-results.json.
+Rules that matter more than the formulas:
+- Missing data returns None WITH a stated reason. Never substitute 0 for "did not run".
+  A zero recall and an unmeasured recall are opposite findings.
+- A case whose RunResult.degraded is True is excluded from the headline metric, and the
+  exclusion is reported, not silent.
+- A case whose verifier test was gated INVALID is excluded from acceptance/rejection rates
+  but still counts in the validity-rate denominator.
+- Case 11 (expect_escalation) is scored on whether the run escalated, not on patch
+  correctness. Counting it as a failed fix would be wrong.
+- Report the denominator alongside every rate. "50%" over two cases is not a finding.
+
+reporting.py renders review_packet.md matching docs/PROJECT.md section 14 exactly:
+decision, issue, behavioral invariant, candidate patch, visible tests, independent verifier
+test, gold hidden evaluator, mutation sensitivity, residual risks, human action. Also writes
+the result table from docs/HLD.md section 7 into evaluation-results.json.
 
 Decision rule, printed together with the inputs that produced it:
   ESCALATE if the contract was low-confidence or case.expect_escalation
-  REJECT if visible tests fail or the patch weakened tests
-  ACCEPT only if visible and a VALID verifier test both pass
+  REJECT   if visible tests fail, or the patch modified an existing test
+  ACCEPT   only if visible AND a VALID verifier test both pass
   otherwise REVIEW REQUIRED
-Every packet ends by stating that a human must review and that SplitSpec merged nothing.
+Note touched_tests means an EXISTING test was modified; adding a test is permitted and must
+not trigger REJECT.
 
-Write tests with hand-built RunResult fixtures whose metric values you compute by hand in the test,
-and assert the rendered packet contains every required section. Run them and paste the output.
+Every packet must state Settings.independence_note() — whether the fixer and verifier
+actually ran on different models — and end by saying a human must review and that SplitSpec
+merged nothing.
+
+Tests: hand-built RunResult fixtures whose metric values you compute BY HAND in the test.
+Cover: a normal mix; all-degraded (recall must be None with a reason, not 0); an
+invalid-gated verifier; case 11's escalation; a patch that added a test (not REJECT) versus
+one that edited a test (REJECT); and every section present in the rendered packet.
+
+Run the unit suite and ruff. Paste all output. No git commands.
 ```
+
+**Verify (run these yourself)**
+```bash
+.venv/bin/ruff check . && .venv/bin/python -m pytest -q
+cat artifacts/issue-07-splitspec/review_packet.md
+```
+Recompute the headline metric by hand from the `result.json` files and check it against
+`evaluation-results.json`. This is the number the whole project reports, so verify it
+arithmetically once rather than trusting the implementation.
+
+Then deliberately break it: mark one case degraded and confirm recall drops that case and
+says so; set every case degraded and confirm recall is `None` with a reason rather than 0.
+
+Watch for: a metric that reads plausibly because it silently averaged over 3 cases instead
+of 12, and a packet claiming ACCEPT on a patch whose gold tests failed.
 
 **Commit**
 ```
 feat(reporting): compute evaluation metrics and render review packets
 
-Metrics module implements the false-fix-detection-recall family with
-explicit None for missing data, and the reporter renders the human review
-packet plus the evaluation result table.
+Implements the false-fix-detection-recall family with explicit None and a
+stated reason for missing data, excludes degraded and invalid-gate cases
+from the headline metric rather than averaging them in, and renders the
+human review packet plus the evaluation result table.
 ```
 
 ---
@@ -433,32 +650,47 @@ packet plus the evaluation result table.
 ```
 Read AGENTS.md, docs/HLD.md, and docs/LLD.md first. Implement Module 12 only.
 
-Build the read-only dashboard in apps/dashboard/ (Next.js App Router, TypeScript, Tailwind) per
-docs/LLD.md "Module 12".
+Build the read-only dashboard in apps/dashboard/ (Next.js App Router, TypeScript, Tailwind)
+per docs/LLD.md "Module 12".
 
 Routes:
-- / : run list, grouped by case, showing mode, decision, and the three suite outcomes at a glance.
-- /run/[id] : contract, patch diff, frozen verifier test with its invariant, the three suites side
-  by side in fixed order (visible -> verifier -> gold), the mutation grid, and the rendered packet.
-- /compare : baseline vs splitspec vs gold oracle, the result table from docs/HLD.md section 7.
+- /              run list grouped by case: mode, decision, the three suite outcomes at a glance
+- /run/[id]      contract, patch diff, frozen verifier test with its invariant, the three
+                 suites side by side in fixed order (visible -> verifier -> gold), the
+                 mutation grid, and the rendered packet
+- /compare       baseline vs splitspec vs gold oracle, the result table from HLD section 7
 
-Data: a server-side route handler reads artifacts/**/result.json from disk at request time. No
-database, no auth, no client-side filesystem access. State it is a local-only tool in the README.
+Data: a server-side route handler reads artifacts/**/result.json from disk at request time.
+No database, no auth, no client-side filesystem access. Say in the README that it is a
+local-only tool and must not be exposed.
 
 Design constraints, follow them literally:
-- Evidence document, not a marketing page. Dense, information-first. Fixed left rail for runs, a
-  bento-grid overview on the landing route.
+- An evidence document, not a marketing page. Dense, information-first. Fixed left rail for
+  runs, a bento-grid overview on the landing route.
 - Light and dark. Define all color tokens once on :root, override only under
-  prefers-color-scheme: dark. Explicit background on body.
-- Pass/fail/invalid never rely on hue alone: each gets an icon and a text label as well as color.
-- Monospace for diffs, test output, and ids. One humanist sans for prose. Two font weights maximum.
+  prefers-color-scheme: dark. Give body an explicit token background.
+- Pass/fail/invalid never rely on hue alone: each gets an icon and a text label too.
+- Monospace for diffs, test output, and ids. One humanist sans for prose. Two weights max.
 - The green-visible-next-to-red-gold contrast is the visual thesis of the project. Make that
   comparison the most legible thing on the page.
 - Motion: state transitions up to 150ms, nothing else. No spinners over stale data.
-- Wide content (diffs, tables) scrolls inside its own container; the page body never scrolls sideways.
+- Wide content scrolls inside its own container; the page body never scrolls sideways.
+- Show degraded and escalated runs distinctly. A degraded run excluded from the metric must
+  look different from one that passed, or the dashboard misrepresents the result.
 
 Run `npm run build`, render at least one real run from artifacts/, and paste the output.
+No git commands.
 ```
+
+**Verify (run these yourself)**
+```bash
+cd apps/dashboard && npm run build && npm run dev
+```
+Open a real run and check: the three suites appear in fixed order; a case where visible
+passes and gold fails is immediately obvious; degraded and escalated runs are visually
+distinct; the diff scrolls inside its own box without the page scrolling sideways; and the
+whole thing is readable in both light and dark (toggle your OS theme, do not just trust the
+CSS).
 
 **Commit**
 ```
@@ -471,13 +703,33 @@ review packet, plus a baseline/splitspec/oracle comparison view.
 
 ---
 
-## After all modules
+## After all modules — the real sweep
+
+```bash
+.venv/bin/python -m splitspec.evaluate --cases cases/ --modes baseline,splitspec \
+  --output artifacts/evaluation-results.json
+```
+
+Expect this to take hours and to hit a daily quota. That is what resumability is for: re-run
+the same command tomorrow and it continues, with the same model per role throughout.
+
+Before reporting anything, check:
+
+- how many cases actually completed, and how many were degraded or errored,
+- how many fixer runs ended on `stop_reason=budget` — if most did, the numbers measure your
+  budget rather than the models, and the budget needs raising before the results mean anything,
+- whether the fixer and verifier really ran on different models (`independence_note()`),
+- the denominator of every rate you quote.
+
+Then fill in the result table and the improvement changelog in docs/PROJECT.md with the real
+outcomes, including the failure modes. A small honest changelog beats an invented one, and
+the claims checklist in PROJECT.md section 17 says what may and may not be claimed.
 
 **Commit**
 ```
 docs: record real evaluation results and improvement changelog
 
-Fills the result table and the iteration changelog in docs/PROJECT.md with
-measured outcomes from the 12-case run, including the failure modes the
-generated verifier tests exhibited.
+Fills the result table and iteration changelog with measured outcomes
+from the 12-case run, including the failure modes the generated verifier
+tests exhibited and the cases excluded from the headline metric.
 ```
