@@ -350,6 +350,9 @@ def _parse_diff(diff: str) -> list[tuple[str, list[tuple[int, list[tuple[str, st
 
     Handles the subset our ``snapshot_diff`` produces: `+++ b/<rel>` file
     headers, `@@ -a,b +c,d @@` hunk headers, and ` ` (context), `+`, `-` lines.
+    A `--- a/<rel>` from-header is a file separator, not a removal: it is the
+    first line of every file's section and follows the previous file's final
+    hunk, so it must never be captured as a `-` op (it starts with a hyphen).
     """
     files: list[tuple[str, list[tuple[int, list[tuple[str, str]]]]]] = []
     file_i = -1
@@ -357,8 +360,9 @@ def _parse_diff(diff: str) -> list[tuple[str, list[tuple[int, list[tuple[str, st
         if line.startswith("+++ b/"):
             files.append((line.removeprefix("+++ b/"), []))
             file_i = len(files) - 1
-        elif line.startswith("@@ ") and file_i >= 0:
-            files[file_i][1].append((_hunk_start(line), []))
+        elif line.startswith(("@@ ", "--- a/")) and file_i >= 0:
+            if line.startswith("@@ "):
+                files[file_i][1].append((_hunk_start(line), []))
         elif file_i >= 0 and files[file_i][1] and line[:1] in "+- ":
             files[file_i][1][-1][1].append((line[:1], line[1:]))
     return files

@@ -200,6 +200,35 @@ def test_apply_patch_roundtrips_an_edit(tmp_path):
         b.destroy()
 
 
+def test_apply_patch_multi_file_diff_does_not_corrupt_prior_file(tmp_path):
+    """Regression: a later file's `--- a/<rel>` header (which follows the previous
+    file's final hunk and starts with a hyphen) must not be parsed as a removal op
+    on that previous file, or its trailing line gets silently dropped.
+
+    issue-07's reference fix spans two files; applying the whole diff to a fresh
+    buggy workspace must reproduce the clean reference verbatim.
+    """
+    import shutil
+
+    case = load_case("issue-07")
+    src = sandbox.materialize(case, "src", tmp_path)
+    fresh = sandbox.materialize(case, "fresh", tmp_path)
+    try:
+        # Build the buggy -> clean reference diff across both buggy files.
+        for rel in case.buggy_files:
+            shutil.copy2(FIXTURE / rel, src.path / rel)
+        diff = src.snapshot_diff()
+
+        fresh.apply_patch(diff)
+        for rel in case.buggy_files:
+            assert (fresh.path / rel).read_text() == (FIXTURE / rel).read_text(), rel
+        # nothing outside the changed files leaked into the patch
+        assert "app/models.py" in diff and "app/routes/registrations.py" in diff
+    finally:
+        src.destroy()
+        fresh.destroy()
+
+
 def test_apply_patch_creates_a_new_file(tmp_path):
     case = load_case("issue-01")
     ws = sandbox.materialize(case, "fixer", tmp_path)
