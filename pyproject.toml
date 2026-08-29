@@ -1,0 +1,18 @@
+[project]
+name = "splitspec"
+version = "0.1.0"
+description = "Independent verification for AI-generated bug fixes"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# schemas.TestRun is a pydantic model, not a test class
+python_classes = ["Test*Case"]
+asyncio_mode = "auto"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -1,0 +1,17 @@
+# Sandbox for running fixture code and generated tests. No network by default.
+# The orchestrator runs on the host and drives this via `docker compose run`.
+services:
+  sandbox:
+    build:
+      context: .
+      dockerfile: docker/sandbox.Dockerfile
+    image: splitspec-sandbox:latest
+    network_mode: "none"
+    working_dir: /workspace
+    volumes:
+      - ./artifacts:/artifacts
+    environment:
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONUNBUFFERED: "1"
+    # Overridden per invocation by the sandbox runner (Module 3).
+    command: ["pytest", "-q"]
