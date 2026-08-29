@@ -28,7 +28,7 @@ sys.path.insert(0, str(ROOT))
 
 from splitspec import sandbox  # noqa: E402
 from splitspec.agents.verifier import VerifierError, run_verifier  # noqa: E402
-from splitspec.config import Settings  # noqa: E402
+from splitspec.config import Settings, load_dotenv  # noqa: E402
 from splitspec.contracts import build_contract  # noqa: E402
 from splitspec.freeze import VERIFIER_TEST_FILENAME, freeze, load_frozen  # noqa: E402
 from splitspec.gate import gate  # noqa: E402
@@ -40,18 +40,10 @@ CASE_ID = "issue-07"
 
 
 def load_env() -> None:
-    """Load SPLITSPEC_* from .env into os.environ (stdlib, does not override)."""
-    env_file = ROOT / ".env"
-    if not env_file.is_file():
+    """Load .env via the single loader in config, so script and CLI agree."""
+    if not (ROOT / ".env").is_file():
         print("WARN: no .env found; assuming SPLITSPEC_* are already exported.")
-        return
-    for line in env_file.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, _, value = line.partition("=")
-        key, value = key.strip(), value.strip().strip('"').strip("'")
-        os.environ.setdefault(key, value)
+    load_dotenv()
 
 
 def repo_context(case: Case) -> str:

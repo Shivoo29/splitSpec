@@ -1,7 +1,8 @@
 """Baseline smoke check: the shared contracts and trace writer actually work."""
 import json
+import os
 
-from splitspec.config import ROOT, Settings
+from splitspec.config import ROOT, Provider, Settings
 from splitspec.schemas import Case, RunResult, TestRun
 from splitspec.trace import Trace
 
@@ -61,3 +62,36 @@ def test_trace_appends(tmp_path):
     events = trace.read()
     assert [e["actor"] for e in events] == ["fixer", "judge"]
     assert json.loads(trace.path.read_text().splitlines()[0])["tool"] == "read_file"
+
+
+def test_load_dotenv_populates_env_without_overriding_exports(tmp_path, monkeypatch):
+    """.env must reach Settings, and a real export must still win over the file.
+
+    The CLI's own failure message tells the user to fix .env, but only
+    scripts/live_check_verifier.py ever loaded it - so `python -m splitspec.run`
+    refused as unconfigured no matter what the user wrote there.
+    """
+    from splitspec.config import load_dotenv
+
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "# a comment\n"
+        "\n"
+        'SPLITSPEC_FIXER_BASE_URL="https://example.test/v1"\n'
+        "export SPLITSPEC_FIXER_MODEL=from-file\n"
+        "SPLITSPEC_FIXER_API_KEYS=k1,k2\n",
+        encoding="utf-8",
+    )
+    monkeypatch.delenv("SPLITSPEC_FIXER_BASE_URL", raising=False)
+    monkeypatch.delenv("SPLITSPEC_FIXER_API_KEYS", raising=False)
+    monkeypatch.setenv("SPLITSPEC_FIXER_MODEL", "from-export")
+
+    load_dotenv(env_file)
+
+    assert os.environ["SPLITSPEC_FIXER_BASE_URL"] == "https://example.test/v1"
+    assert os.environ["SPLITSPEC_FIXER_API_KEYS"] == "k1,k2"
+    assert os.environ["SPLITSPEC_FIXER_MODEL"] == "from-export", "export must beat .env"
+
+    provider = Provider.from_env("fixer")
+    assert provider.configured is True
+    assert provider.api_keys == ["k1", "k2"]

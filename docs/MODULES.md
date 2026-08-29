@@ -35,6 +35,8 @@ real configured providers before being called done.
 | 429 aborted the sweep | single-key 429 must back off, not raise |
 | Fixer patch contained `sandbox.jsonl` | run artifacts were written inside the workspace |
 | `touched_tests` on a legitimate patch | adding a test was conflated with editing one |
+| Resume skipped the pairs that failed | error `result.json` still validated as a `RunResult`; check the failure marker BEFORE validating |
+| Verifier test passed on the buggy code | `asyncio.gather` over one event loop serializes ASGI requests — no real concurrency, so no race to catch |
 
 **Provider limits that shape design:** Groq free tier is 8,000 TPM — fine for a single
 contract call, unusable for an agent loop. Gemini and Mistral both handle agent loops.

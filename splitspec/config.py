@@ -22,6 +22,31 @@ TRAJECTORIES_DIR = ROOT / "trajectories"
 Role = str  # "fixer" | "verifier" | "contract" | "fallback"
 
 
+def load_dotenv(path: Path | None = None) -> None:
+    """Load ``SPLITSPEC_*`` style KEY=VALUE lines from .env into os.environ.
+
+    Real environment variables win: this uses setdefault, so exporting a var still
+    overrides the file. Stdlib parse - a dependency for a dozen lines would not
+    earn its keep.
+
+    Called by the CLI entry points, NOT by Settings.from_env(): .env is the
+    documented place to put credentials (the CLI's own error message says so), but
+    loading it inside from_env() would make every unit test read the developer's
+    real .env and silently override its own monkeypatched environment. Keep
+    Settings hermetic; load the file at the edge.
+    """
+    env_file = Path(path) if path is not None else ROOT / ".env"
+    if not env_file.is_file():
+        return
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        key = key.removeprefix("export ").strip()
+        os.environ.setdefault(key, value.strip().strip('"').strip("'"))
+
+
 def _int(name: str, default: int) -> int:
     try:
         return int(os.environ.get(name, default))
