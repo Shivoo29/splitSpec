@@ -40,6 +40,7 @@ from splitspec.freeze import freeze
 from splitspec.gate import gate
 from splitspec.judge import judge
 from splitspec.llm import ModelClient
+from splitspec.mutation import score_mutants
 from splitspec.schemas import (
     Case,
     IssueContract,
@@ -103,6 +104,7 @@ class GraphContext:
     clock: Callable[[], float] = field(default=time.monotonic)
     judge_runner: JudgeRunner | None = None
     gate_runner: Callable[..., sandbox.ExecResult] | None = None
+    mutation_runner: Callable[..., sandbox.ExecResult] | None = None
 
 
 def _role_model(provider: Provider) -> ModelUse:
@@ -212,20 +214,19 @@ def _judge_node(ctx: GraphContext, state: RunState) -> dict[str, Any]:
 
 
 def _mutation_node(ctx: GraphContext, state: RunState) -> dict[str, Any]:
-    """Thin wiring stub for the mutation step (replaced by Module 10).
-
-    Module 9 only wires the graph; real mutant evaluation ships in Module 10.
-    The artifact is still produced so the §13 contract holds from day one.
-    """
     start = ctx.clock()
-    path = ctx.artifact_dir / "mutation_results.json"
-    path.write_text("[]\n", encoding="utf-8")
-    state["trace"].event(
-        "graph", "mutation_stub",
-        case_id=state["case"].id, mode=state["mode"],
-        path=str(path), pending_module="Module 10",
+    results = score_mutants(
+        state["case"], ctx.artifact_dir, ctx.workspace_root, state["trace"],
+        runner=ctx.mutation_runner,
     )
-    return {"mutation": [], "time_mutation": ctx.clock() - start}
+    state["trace"].event(
+        "graph", "mutation",
+        case_id=state["case"].id, mode=state["mode"],
+        killed=sum(1 for r in results if r.killed),
+        denominator=len(results),
+        path=str(ctx.artifact_dir / "mutation_results.json"),
+    )
+    return {"mutation": results, "time_mutation": ctx.clock() - start}
 
 
 def _report_node(ctx: GraphContext, state: RunState) -> dict[str, Any]:

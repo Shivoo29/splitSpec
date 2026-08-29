@@ -102,6 +102,12 @@ def _fake_gate(ws, command, timeout):
     return sandbox.ExecResult(exit_code=1, stdout="1 failed", stderr="", duration_sec=0.1)
 
 
+def _fake_mutation(ws, command, timeout, mounts=None):
+    # The frozen test passes on every mutant, so no mutant is "killed" by it. Keeps
+    # the graph's mutation node deterministic and Docker-free in unit tests.
+    return sandbox.ExecResult(exit_code=0, stdout="1 passed", stderr="", duration_sec=0.1)
+
+
 def _ctx(tmp_path, *, settings=None) -> GraphContext:
     return GraphContext(
         settings=settings or _settings(),
@@ -110,6 +116,7 @@ def _ctx(tmp_path, *, settings=None) -> GraphContext:
         artifact_dir=tmp_path / "art",
         gate_runner=_fake_gate,
         judge_runner=FakeJudge(),
+        mutation_runner=_fake_mutation,
     )
 
 
@@ -396,6 +403,7 @@ def test_docker_splitspec_run_end_to_end_with_scripted_client(tmp_path):
         artifact_dir=tmp_path / "art",
         gate_runner=None,      # real sandbox gate
         judge_runner=None,     # real sandbox judge
+        mutation_runner=None,  # real sandbox mutant scoring
     )
     result = execute(ctx, load_case(), "splitspec")
 
