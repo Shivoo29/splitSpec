@@ -1,0 +1,43 @@
+{
+  "score": 0.4,
+  "killed": 2,
+  "denominator": 5,
+  "excluded_unkillable": [],
+  "results": [
+    {
+      "mutant_id": "m08-1",
+      "description": "original bug: creates payment before checking idempotency key, allowing duplicates on retry",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m08-2",
+      "description": "obvious-path-only fix: checks key before creating but only per-user, allows cross-user duplicates",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m08-3",
+      "description": "sequential-only fix: uses SELECT FOR UPDATE which SQLite doesn't fully support for concurrency",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m08-4",
+      "description": "returns right value (200 for replay) but wrong state (creates duplicate payment row)",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m08-5",
+      "description": "weakens-the-test fix: visible test only checks 201, ignores idempotency replay behavior",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ]
+}

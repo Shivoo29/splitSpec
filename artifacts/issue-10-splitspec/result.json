@@ -1,0 +1,162 @@
+{
+  "case_id": "issue-10",
+  "mode": "splitspec",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "verifier",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-3.1-flash-lite",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-10",
+    "summary": "Invoice totals are rounding down for amounts that have a half‑cent fraction, but finance policy requires those amounts to be rounded up to the next cent.",
+    "invariants": [
+      "If the computed monetary amount has a fractional part equal to exactly half a cent (0.005 of a dollar), the system must round the amount up to the next whole cent."
+    ],
+    "inputs": [
+      "A quote amount that after any internal calculation results in a value with a half‑cent fraction (e.g., $1.025, $2.135, $0.005)."
+    ],
+    "expected_outputs": [
+      "The invoice total displayed (or stored) is the quoted amount rounded up to the nearest cent (e.g., $1.03 for $1.025, $2.14 for $2.135, $0.01 for $0.005)."
+    ],
+    "out_of_scope": [
+      "Rounding behavior for amounts that do not end in a half‑cent.",
+      "Currency handling other than the primary currency used by the system.",
+      "Tax, discount, or fee calculations that may affect the final amount.",
+      "Formatting or presentation details unrelated to the rounding rule."
+    ],
+    "ambiguities": [],
+    "confidence": "high"
+  },
+  "patch": {
+    "case_id": "issue-10",
+    "diff": "--- a/app/money.py\n+++ b/app/money.py\n@@ -6,7 +6,7 @@\n \"\"\"\n from __future__ import annotations\n \n-from decimal import ROUND_HALF_EVEN, Decimal\n+from decimal import ROUND_HALF_UP, Decimal\n \n SUPPORTED = {\"USD\": 2, \"EUR\": 2, \"GBP\": 2, \"CHF\": 2, \"CAD\": 2, \"JPY\": 0}\n \n@@ -26,7 +26,7 @@\n def quantize(amount: object, currency: str) -> Decimal:\n     amount = assert_amount(amount)\n     places = Decimal(10) ** -cash_places(currency)\n-    return amount.quantize(places, rounding=ROUND_HALF_EVEN)\n+    return amount.quantize(places, rounding=ROUND_HALF_UP)\n \n \n def total(amounts: list[object]) -> Decimal:\n--- a/test_half_cent_fix.py\n+++ b/test_half_cent_fix.py\n@@ -0,0 +1,32 @@\n+\"\"\"Test to verify the half-cent rounding fix.\"\"\"\n+from decimal import Decimal\n+from app import money\n+\n+# Test cases from the issue description\n+def test_issue_examples():\n+    # $1.025 should round up to $1.03\n+    assert money.quantize(Decimal(\"1.025\"), \"USD\") == Decimal(\"1.03\")\n+    \n+    # $2.135 should round up to $2.14\n+    assert money.quantize(Decimal(\"2.135\"), \"USD\") == Decimal(\"2.14\")\n+    \n+    # $0.005 should round up to $0.01\n+    assert money.quantize(Decimal(\"0.005\"), \"USD\") == Decimal(\"0.01\")\n+    \n+    print(\"All issue examples pass!\")\n+\n+# Test that non-half-cent values still work correctly\n+def test_non_half_cent_values():\n+    # These should not be affected by the change\n+    assert money.quantize(Decimal(\"1.004\"), \"USD\") == Decimal(\"1.00\")\n+    assert money.quantize(Decimal(\"1.006\"), \"USD\") == Decimal(\"1.01\")\n+    assert money.quantize(Decimal(\"1.015\"), \"USD\") == Decimal(\"1.02\")\n+    assert money.quantize(Decimal(\"1.024\"), \"USD\") == Decimal(\"1.02\")\n+    assert money.quantize(Decimal(\"1.026\"), \"USD\") == Decimal(\"1.03\")\n+    \n+    print(\"Non-half-cent values work correctly!\")\n+\n+if __name__ == \"__main__\":\n+    test_issue_examples()\n+    test_non_half_cent_values()\n+    print(\"All tests passed!\")\n",
+    "files_changed": [
+      "app/money.py",
+      "test_half_cent_fix.py"
+    ],
+    "lines_added": 34,
+    "lines_removed": 2,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; ## Summary I successfully resolved issue-10 where invoice totals were rounding down for amounts with a half-cent fraction, but finance policy requires them to round up. ### Changes Made - **File modified**: `app/money.py` - **Change**: Changed the rounding method from `ROUND_HALF_EVEN` (bankers rounding) to `ROUND_HALF_UP` in the `quantize()` function - **Specific change**: Line 3 - imported `ROUND_HALF_UP` instead of `ROUND_HALF_EVEN`, and line 27 - changed the rounding parameter from `ROUND_HALF_EVEN` to `ROUND_HALF_UP` ### Why This Fix Works - `ROUND_HALF_EVEN` (bankers rounding) rounds hal... [truncated, 1504 chars; full reply in trajectory.jsonl]"
+  },
+  "verifier_test": {
+    "case_id": "issue-10",
+    "filename": "test_issue_10_rounding.py",
+    "contents": "from decimal import Decimal\nfrom app import money\n\ndef test_half_cent_rounding_invariant():\n    \"\"\"\n    Test that half-cent fractions are always rounded up to the next cent.\n    This checks that the rounding mode for .005 is ROUND_HALF_UP, not ROUND_HALF_EVEN.\n    \"\"\"\n    assert money.quantize(Decimal(\"0.005\"), \"USD\") == Decimal(\"0.01\")\n    assert money.quantize(Decimal(\"1.025\"), \"USD\") == Decimal(\"1.03\")\n    assert money.quantize(Decimal(\"2.135\"), \"USD\") == Decimal(\"2.14\")\n",
+    "run_command": "pytest test_issue_10_rounding.py",
+    "invariant": "If a monetary amount has a fractional part of exactly 0.005 (a half-cent), it must be rounded up to the next cent (e.g., 1.025 -> 1.03). This verifies that the application correctly uses a round-half-up policy instead of the currently implemented round-half-even (bankers) policy, which rounds to the nearest even digit and causes premature rounding down on values like 1.025.",
+    "assumptions": [
+      "The currency is USD, which has 2 decimal places.",
+      "The input to `money.quantize` is a Decimal object or a string/number that converts to it.",
+      "The environment includes the `app` package."
+    ],
+    "confidence": "high",
+    "frozen_sha256": "5cc46ab79dfbfeade148cfe1ca270a7c01df6f29e89b303689cfa1155a0ee2b5"
+  },
+  "validity": {
+    "compiles": true,
+    "runs": true,
+    "fails_on_original_bug": true,
+    "passed": true,
+    "reason": "test failed on the buggy code (1 failures) as expected"
+  },
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_money_rounding.py",
+    "passed": true,
+    "total": 3,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.081,
+    "stdout_tail": "...                                                                      [100%]\n3 passed in 0.01s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-10-rp_pgkah/issue-10-judge/.junit/visible.xml"
+  },
+  "verifier": {
+    "label": "verifier",
+    "command": "pytest -q --junitxml=/workspace/.junit/verifier.xml test_issue_10_rounding.py",
+    "passed": true,
+    "total": 1,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.074,
+    "stdout_tail": ".                                                                        [100%]\n1 passed in 0.01s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-10-rp_pgkah/issue-10-judge/.junit/verifier.xml"
+  },
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 5,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.138,
+    "stdout_tail": ".....                                                                    [100%]\n5 passed in 0.05s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-10-rp_pgkah/issue-10-judge/.junit/gold.xml"
+  },
+  "mutation": [
+    {
+      "mutant_id": "m01-original-bug",
+      "description": "the seeded defect unchanged, bankers rounding on every amount",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m02-obvious-path-only",
+      "description": "special-cases the one amount from the report and rounds the rest half-even",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m03-right-value-wrong-state",
+      "description": "rounds correctly on render but stores the half-even value",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m04-weakens-the-test",
+      "description": "production code unchanged; the visible test's expectations are edited to match",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ],
+  "decision": "ACCEPT",
+  "runtime_sec": 210.883,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-10-splitspec"
+}

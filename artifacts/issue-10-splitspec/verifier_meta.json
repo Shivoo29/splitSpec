@@ -1,0 +1,13 @@
+{
+  "case_id": "issue-10",
+  "filename": "test_issue_10_rounding.py",
+  "run_command": "pytest test_issue_10_rounding.py",
+  "invariant": "If a monetary amount has a fractional part of exactly 0.005 (a half-cent), it must be rounded up to the next cent (e.g., 1.025 -> 1.03). This verifies that the application correctly uses a round-half-up policy instead of the currently implemented round-half-even (bankers) policy, which rounds to the nearest even digit and causes premature rounding down on values like 1.025.",
+  "assumptions": [
+    "The currency is USD, which has 2 decimal places.",
+    "The input to `money.quantize` is a Decimal object or a string/number that converts to it.",
+    "The environment includes the `app` package."
+  ],
+  "confidence": "high",
+  "frozen_sha256": "5cc46ab79dfbfeade148cfe1ca270a7c01df6f29e89b303689cfa1155a0ee2b5"
+}

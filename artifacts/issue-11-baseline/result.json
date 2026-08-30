@@ -1,0 +1,6 @@
+{
+  "case_id": "issue-11",
+  "mode": "baseline",
+  "ok": false,
+  "error": "The read operation timed out"
+}

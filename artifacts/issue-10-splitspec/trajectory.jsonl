@@ -1,0 +1,71 @@
+{"ts": 1788118636.6098726, "actor": "contract", "kind": "call", "case_id": "issue-10", "model": "openai/gpt-oss-120b"}
+{"ts": 1788118636.6100292, "actor": "contract", "kind": "tokens", "input_tokens": 959, "output_tokens": 705, "model": "openai/gpt-oss-120b"}
+{"ts": 1788118636.6100695, "actor": "contract", "kind": "parsed", "case_id": "issue-10", "confidence": "high", "n_invariants": 1, "n_ambiguities": 0}
+{"ts": 1788118639.0130281, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 905, "output_tokens": 54, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118639.0138645, "actor": "fixer", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788118640.3443406, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 1030, "output_tokens": 16, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118640.3451324, "actor": "verifier", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788118640.5953438, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1302, "output_tokens": 32, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118640.5955412, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/money.py", "chars": 1234, "truncated": false}
+{"ts": 1788118644.957749, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 1450, "output_tokens": 20, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118644.9579554, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "app/money.py", "chars": 1234, "truncated": false}
+{"ts": 1788118647.5119877, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 1824, "output_tokens": 31, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118647.5122232, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "visible_tests/issue-10/test_money_rounding.py", "chars": 869, "truncated": false}
+{"ts": 1788118660.9272642, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 2161, "output_tokens": 35, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118662.112392, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-10/test_money_rounding.py"], "exit_code": 1, "duration_sec": 1.185}
+{"ts": 1788118667.4799392, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 2907, "output_tokens": 183, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118667.480144, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_issue_10_rounding.py", "chars": 479}
+{"ts": 1788118670.9612432, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1653, "output_tokens": 37, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118670.961498, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "visible_tests/issue-10/test_money_rounding.py", "chars": 869, "truncated": false}
+{"ts": 1788118672.7867007, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 3120, "output_tokens": 29, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118673.2146826, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1971, "output_tokens": 90, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118673.8761578, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_issue_10_rounding.py"], "exit_code": 1, "duration_sec": 1.089}
+{"ts": 1788118674.3124578, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-10/test_money_rounding.py", "-v"], "exit_code": 1, "duration_sec": 1.097}
+{"ts": 1788118682.4294848, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 2761, "output_tokens": 469, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118682.4297311, "actor": "fixer", "kind": "tool_call", "tool": "write_file", "path": "app/money.py", "chars": 1231}
+{"ts": 1788118682.941675, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 3634, "output_tokens": 411, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118682.9417517, "actor": "verifier", "kind": "tool_call", "tool": "finish", "chars": 1276}
+{"ts": 1788118682.9417748, "actor": "verifier", "kind": "agent_end", "stop_reason": "finished", "final_message_len": 1276, "calls": 7, "tokens_generated": 725, "billed_tokens": 16851}
+{"ts": 1788118682.9418283, "actor": "verifier", "kind": "test", "case_id": "issue-10", "stop_reason": "finished", "filename": "test_issue_10_rounding.py", "invariant": "If a monetary amount has a fractional part of exactly 0.005 (a half-cent), it must be rounded up to the next cent (e.g., 1.025 -> 1.03). This verifies that the application correctly uses a round-half-up policy instead of the currently implemented round-half-even (bankers) policy, which rounds to the nearest even digit and causes premature rounding down on values like 1.025.", "confidence": "high", "n_assumptions": 3, "contents_len": 479}
+{"ts": 1788118699.5300188, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 3245, "output_tokens": 43, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118700.5899959, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-10/test_money_rounding.py", "-v"], "exit_code": 0, "duration_sec": 1.06}
+{"ts": 1788118702.0905883, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 3552, "output_tokens": 41, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118703.1288066, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "-x"], "exit_code": 5, "duration_sec": 1.038}
+{"ts": 1788118704.5475287, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 3730, "output_tokens": 25, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118704.5477777, "actor": "fixer", "kind": "tool_call", "tool": "list_files", "path": "visible_tests", "entries": 2}
+{"ts": 1788118706.1543543, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 3779, "output_tokens": 41, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118706.1562102, "actor": "fixer", "kind": "tool_call", "tool": "search", "pattern": "from app import money|from app.money import|import app.money", "matches": 4}
+{"ts": 1788118707.4174206, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 3882, "output_tokens": 30, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118707.4177155, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/routes/events.py", "chars": 3946, "truncated": false}
+{"ts": 1788118708.335748, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4950, "output_tokens": 16, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118708.3359442, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/routes/payments.py", "chars": 3195, "truncated": false}
+{"ts": 1788118709.2481122, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 5773, "output_tokens": 12, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118709.2483578, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "seed.py", "chars": 4466, "truncated": false}
+{"ts": 1788118721.0758412, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 7200, "output_tokens": 715, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118721.0760684, "actor": "fixer", "kind": "tool_call", "tool": "write_file", "path": "test_half_cent_fix.py", "chars": 1203}
+{"ts": 1788118735.2501652, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 7934, "output_tokens": 22, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118735.2502506, "actor": "fixer", "kind": "tool_error", "tool": "run_tests", "reason": "refused", "detail": "only 'pytest' invocations are allowed"}
+{"ts": 1788118736.9053543, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 7973, "output_tokens": 25, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118737.951882, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_half_cent_fix.py", "-v"], "exit_code": 0, "duration_sec": 1.046}
+{"ts": 1788118739.371118, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8205, "output_tokens": 44, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118740.405351, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-10/test_money_rounding.py", "-v"], "exit_code": 0, "duration_sec": 1.034}
+{"ts": 1788118764.7581284, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8513, "output_tokens": 35, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118764.7582097, "actor": "fixer", "kind": "tool_error", "tool": "run_tests", "reason": "refused", "detail": "only 'pytest' invocations are allowed"}
+{"ts": 1788118766.2931042, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8565, "output_tokens": 25, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118766.2931824, "actor": "fixer", "kind": "tool_error", "tool": "run_tests", "reason": "refused", "detail": "only 'pytest' invocations are allowed"}
+{"ts": 1788118768.2396793, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8607, "output_tokens": 30, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118768.2398653, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/money.py", "chars": 1231, "truncated": false}
+{"ts": 1788118769.4671178, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8954, "output_tokens": 35, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118770.5165722, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/", "-v"], "exit_code": 0, "duration_sec": 1.049}
+{"ts": 1788118790.1805007, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 9253, "output_tokens": 434, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118790.180589, "actor": "fixer", "kind": "tool_call", "tool": "finish", "chars": 1504}
+{"ts": 1788118790.1806123, "actor": "fixer", "kind": "agent_end", "stop_reason": "finished", "final_message_len": 1504, "calls": 21, "tokens_generated": 2255, "billed_tokens": 114962}
+{"ts": 1788118790.1824474, "actor": "fixer", "kind": "patch", "case_id": "issue-10", "stop_reason": "finished", "stop_ok": true, "files": ["app/money.py", "test_half_cent_fix.py"], "lines_added": 34, "lines_removed": 2, "touched_tests": false, "diff_len": 1908}
+{"ts": 1788118790.1835709, "actor": "graph", "kind": "freeze", "case_id": "issue-10", "mode": "splitspec", "filename": "test_issue_10_rounding.py", "frozen_sha256": "5cc46ab79dfbfeade148cfe1ca270a7c01df6f29e89b303689cfa1155a0ee2b5"}
+{"ts": 1788118791.3504865, "actor": "gate", "kind": "validity", "case_id": "issue-10", "test_filename": "test_issue_10_rounding.py", "compiles": true, "runs": true, "fails_on_original_bug": true, "passed": true, "reason": "test failed on the buggy code (1 failures) as expected", "exit_code": 1}
+{"ts": 1788118792.4361923, "actor": "judge", "kind": "suite", "case_id": "issue-10", "label": "visible", "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_money_rounding.py", "exit_code": 0, "passed": true, "total": 3, "failures": 0, "errors": 0, "duration_sec": 1.081}
+{"ts": 1788118793.5105443, "actor": "judge", "kind": "suite", "case_id": "issue-10", "label": "verifier", "command": "pytest -q --junitxml=/workspace/.junit/verifier.xml test_issue_10_rounding.py", "exit_code": 0, "passed": true, "total": 1, "failures": 0, "errors": 0, "duration_sec": 1.074}
+{"ts": 1788118794.6491206, "actor": "judge", "kind": "suite", "case_id": "issue-10", "label": "gold", "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold", "exit_code": 0, "passed": true, "total": 5, "failures": 0, "errors": 0, "duration_sec": 1.138}
+{"ts": 1788118799.064994, "actor": "mutation", "kind": "score", "case_id": "issue-10", "test_filename": "test_issue_10_rounding.py", "killed": 4, "denominator": 4, "score": 1.0, "mutants": ["m01-original-bug", "m02-obvious-path-only", "m03-right-value-wrong-state", "m04-weakens-the-test"], "excluded_unkillable": []}
+{"ts": 1788118799.0650477, "actor": "graph", "kind": "mutation", "case_id": "issue-10", "mode": "splitspec", "killed": 4, "denominator": 4, "path": "artifacts/issue-10-splitspec/mutation_results.json"}
+{"ts": 1788118799.070287, "actor": "report", "kind": "written", "case_id": "issue-10", "mode": "splitspec", "artifact_dir": "artifacts/issue-10-splitspec", "degraded": false, "cost_usd": 0.0, "runtime_sec": 210.883, "models": [["contract", "openai/gpt-oss-120b"], ["fixer", "devstral-2512"], ["verifier", "gemini-3.1-flash-lite"]]}

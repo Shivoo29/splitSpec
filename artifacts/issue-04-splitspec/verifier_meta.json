@@ -1,0 +1,13 @@
+{
+  "case_id": "issue-04",
+  "filename": "test_issue_04_jpy.py",
+  "run_command": "pytest test_issue_04_jpy.py",
+  "invariant": "When the currency is JPY, the serialized monetary amount must be an integer without fractional components, rounded to the nearest whole number.",
+  "assumptions": [
+    "The system uses 'money.render' to serialize monetary amounts to strings.",
+    "JPY should have zero decimal places instead of the current two.",
+    "The expected rounding for JPY is round-half-up (1200.5 -> 1201)."
+  ],
+  "confidence": "high",
+  "frozen_sha256": "2e245104876603fb8d39ca2be61820e94b55fc215eeed2beacaf1027fa41d38b"
+}

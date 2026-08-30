@@ -1,0 +1,180 @@
+{
+  "case_id": "issue-08",
+  "mode": "splitspec",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "verifier",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-3.1-flash-lite",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-08",
+    "summary": "A payment request retried with the same Idempotency-Key must not create a second payment record or trigger a second charge.",
+    "invariants": [
+      "For any given Idempotency-Key value, the payment service must create at most one payment record and trigger at most one external charge, regardless of how many times the client repeats the request.",
+      "When a request with a previously seen Idempotency-Key is received, the service must return the same response (e.g., payment ID, status) as the original request without performing the side‑effect again."
+    ],
+    "inputs": [
+      "HTTP POST to the payment endpoint with a JSON body describing a payment and an Idempotency-Key header; the request is sent, times out (client sees no response), and the client repeats the identical request with the same Idempotency-Key.",
+      "Concurrent or sequential retries of the same request with identical Idempotency-Key under normal operating conditions."
+    ],
+    "expected_outputs": [
+      "Exactly one payment record persisted in the database for the given Idempotency-Key.",
+      "Exactly one external charge (e.g., bank transaction) issued for the given Idempotency-Key.",
+      "The HTTP response to the retry contains the same payment identifier and status as the original successful response.",
+      "No error or duplicate‑creation response is returned; the service signals successful idempotent handling."
+    ],
+    "out_of_scope": [
+      "How the client detects a timeout or decides to retry.",
+      "The internal storage mechanism for Idempotency-Key values.",
+      "Performance characteristics or latency of the idempotency check.",
+      "Any behavior unrelated to the payment creation endpoint (e.g., other routes)."
+    ],
+    "ambiguities": [
+      "Exact URL path of the payment endpoint (e.g., /payments, /api/payments).",
+      "Schema of the request payload required to create a payment.",
+      "Definition of \"timeout\" from the client perspective (network timeout, server 5xx, etc.).",
+      "Whether the service should return the original response body verbatim or may return a generic idempotent acknowledgment.",
+      "How the external bank charge is observed or logged for verification."
+    ],
+    "confidence": "medium"
+  },
+  "patch": {
+    "case_id": "issue-08",
+    "diff": "--- a/app/routes/payments.py\n+++ b/app/routes/payments.py\n@@ -63,6 +63,16 @@\n     if currency != event.currency:\n         raise HTTPException(status_code=400, detail=\"charge currency must match the event currency\")\n \n+    # Check for existing payment with the same idempotency key first\n+    existing = session.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))\n+    if existing is not None:\n+        if existing.user_id != user.id:\n+            raise HTTPException(\n+                status_code=409, detail=\"idempotency key belongs to another user\"\n+            ) from None\n+        response.status_code = 200\n+        return payment_payload(existing)\n+\n     payment = Payment(\n         user_id=user.id,\n         event_id=event.id,\n@@ -77,6 +87,7 @@\n         session.commit()\n     except IntegrityError:\n         session.rollback()\n+        # Check again after rollback in case of race condition\n         existing = session.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))\n         if existing is not None:\n             if existing.user_id != user.id:\n@@ -87,10 +98,5 @@\n             return payment_payload(existing)\n         raise HTTPException(status_code=409, detail=\"idempotency key already in use\") from None\n \n-    existing = session.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))\n-    if existing is not None and existing.id != payment.id:\n-        # Another payment with the same key exists - but we already created ours!\n-        pass  # Don't raise, just return the new payment (wrong behavior)\n-\n     response.status_code = 201\n     return payment_payload(payment)\n--- a/test_idempotency_race.py\n+++ b/test_idempotency_race.py\n@@ -0,0 +1,79 @@\n+\"\"\"Test to verify idempotency handles concurrent requests correctly.\"\"\"\n+import asyncio\n+import pytest\n+\n+\n+async def test_sequential_duplicate_requests(client, auth_headers, tokens):\n+    \"\"\"Test that sequential requests with the same idempotency key return the same payment.\"\"\"\n+    headers = {**auth_headers(tokens[\"alice\"]), \"Idempotency-Key\": \"seq-test-key\"}\n+    \n+    # First request\n+    response1 = await client.post(\"/payments\", headers=headers, json={\"event_id\": 1})\n+    assert response1.status_code == 201\n+    body1 = response1.json()\n+    payment_id_1 = body1[\"id\"]\n+    \n+    # Second request with same key\n+    response2 = await client.post(\"/payments\", headers=headers, json={\"event_id\": 1})\n+    assert response2.status_code == 200  # Should return 200 for idempotent replay\n+    body2 = response2.json()\n+    payment_id_2 = body2[\"id\"]\n+    \n+    # Should be the same payment\n+    assert payment_id_1 == payment_id_2\n+    assert body1[\"amount\"] == body2[\"amount\"]\n+    assert body1[\"currency\"] == body2[\"currency\"]\n+    assert body1[\"status\"] == body2[\"status\"]\n+\n+\n+async def test_concurrent_duplicate_requests(client, auth_headers, tokens):\n+    \"\"\"Test that concurrent requests with the same idempotency key don't create duplicates.\"\"\"\n+    \n+    async def make_payment():\n+        return await client.post(\n+            \"/payments\",\n+            headers={**auth_headers(tokens[\"alice\"]), \"Idempotency-Key\": \"conc-test-key\"},\n+            json={\"event_id\": 1},\n+        )\n+    \n+    # Send two concurrent requests with the same idempotency key\n+    task1 = asyncio.create_task(make_payment())\n+    task2 = asyncio.create_task(make_payment())\n+    \n+    response1 = await task1\n+    response2 = await task2\n+    \n+    # Both should succeed (one with 201, one with 200)\n+    assert response1.status_code in (200, 201)\n+    assert response2.status_code in (200, 201)\n+    \n+    # They should return the same payment ID\n+    body1 = response1.json()\n+    body2 = response2.json()\n+    assert body1[\"id\"] == body2[\"id\"], f\"Different payment IDs: {body1['id']} vs {body2['id']}\"\n+    \n+    # All fields should be identical\n+    assert body1[\"amount\"] == body2[\"amount\"]\n+    assert body1[\"currency\"] == body2[\"currency\"]\n+    assert body1[\"status\"] == body2[\"status\"]\n+    assert body1[\"user_id\"] == body2[\"user_id\"]\n+    assert body1[\"event_id\"] == body2[\"event_id\"]\n+\n+\n+async def test_idempotency_key_belongs_to_another_user(client, auth_headers, tokens):\n+    \"\"\"Test that using another user's idempotency key is rejected.\"\"\"\n+    headers_alice = {**auth_headers(tokens[\"alice\"]), \"Idempotency-Key\": \"alice-key\"}\n+    \n+    # Alice creates a payment\n+    response1 = await client.post(\"/payments\", headers=headers_alice, json={\"event_id\": 1})\n+    assert response1.status_code == 201\n+    \n+    # Bob tries to use the same idempotency key\n+    headers_bob = {**auth_headers(tokens[\"bob\"]), \"Idempotency-Key\": \"alice-key\"}\n+    response2 = await client.post(\"/payments\", headers=headers_bob, json={\"event_id\": 1})\n+    assert response2.status_code == 409\n+    assert \"belongs to another user\" in response2.json()[\"detail\"]\n+\n+\n+if __name__ == \"__main__\":\n+    pytest.main([__file__, \"-v\", \"-s\"])\n--- a/test_race_condition.py\n+++ b/test_race_condition.py\n@@ -0,0 +1,37 @@\n+\"\"\"Test to verify the race condition in idempotency handling.\"\"\"\n+import asyncio\n+import pytest\n+\n+\n+async def test_concurrent_duplicate_payments(client, auth_headers, tokens):\n+    \"\"\"Test that concurrent requests with the same idempotency key don't create duplicates.\"\"\"\n+    \n+    async def make_payment():\n+        return await client.post(\n+            \"/payments\",\n+            headers={**auth_headers(tokens[\"alice\"]), \"Idempotency-Key\": \"race-test-key\"},\n+            json={\"event_id\": 1},\n+        )\n+    \n+    # Send two concurrent requests with the same idempotency key\n+    task1 = asyncio.create_task(make_payment())\n+    task2 = asyncio.create_task(make_payment())\n+    \n+    response1 = await task1\n+    response2 = await task2\n+    \n+    print(f\"Response 1 status: {response1.status_code}, body: {response1.json()}\")\n+    print(f\"Response 2 status: {response2.status_code}, body: {response2.json()}\")\n+    \n+    # Both should succeed (one with 201, one with 200)\n+    assert response1.status_code in (200, 201)\n+    assert response2.status_code in (200, 201)\n+    \n+    # They should return the same payment ID\n+    body1 = response1.json()\n+    body2 = response2.json()\n+    assert body1[\"id\"] == body2[\"id\"], f\"Different payment IDs: {body1['id']} vs {body2['id']}\"\n+\n+\n+if __name__ == \"__main__\":\n+    pytest.main([__file__, \"-v\", \"-s\"])\n",
+    "files_changed": [
+      "app/routes/payments.py",
+      "test_idempotency_race.py",
+      "test_race_condition.py"
+    ],
+    "lines_added": 127,
+    "lines_removed": 5,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; Fixed idempotency issue in payment service by adding upfront check for existing payments before creation. The fix ensures that retry requests with the same Idempotency-Key return the existing payment instead of creating duplicates. Modified app/routes/payments.py to check for existing payments first, handle race conditions properly, and maintain all existing functionality. All visible tests pass."
+  },
+  "verifier_test": {
+    "case_id": "issue-08",
+    "filename": "test_idempotency.py",
+    "contents": "import pytest\nfrom httpx import AsyncClient\n\n@pytest.mark.asyncio\nasync def test_duplicate_payment_not_created(client, auth_headers, tokens):\n    # Verify that retrying a payment with the same idempotency key \n    # does not create additional records in the database. \n    # The invariant is that for a given Idempotency-Key, only one \n    # payment record is created, and retries return the same payment ID.\n    \n    headers = {**auth_headers(tokens['alice']), 'Idempotency-Key': 'test-duplicate-001'}\n    \n    # First attempt\n    r1 = await client.post('/payments', headers=headers, json={'event_id': 1})\n    assert r1.status_code == 201\n    id1 = r1.json()['id']\n    \n    # Second attempt (retry)\n    r2 = await client.post('/payments', headers=headers, json={'event_id': 1})\n    \n    # Invariant: The retry must return the same payment ID as the first request.\n    # The bug in the current code is that it continues to create a new record even if the\n    # idempotency key already exists in a non-transactional way or after the commit.\n    assert r2.json()['id'] == id1, 'Retry created a new payment record (duplicate)'\n",
+    "run_command": "pytest test_idempotency.py",
+    "invariant": "For any given Idempotency-Key value, the payment service must create at most one payment record, and retries must return the original payment record identifier.",
+    "assumptions": [
+      "The application's payment endpoint (/payments) uses the 'Idempotency-Key' header.",
+      "The application assigns a unique integer ID to each payment record."
+    ],
+    "confidence": "high",
+    "frozen_sha256": "4be054b4119f8ea8370e2dbe69fd4fc26c056a2ee46db7acad6d11a3d8b209f6"
+  },
+  "validity": {
+    "compiles": true,
+    "runs": true,
+    "fails_on_original_bug": true,
+    "passed": true,
+    "reason": "test failed on the buggy code (1 failures) as expected"
+  },
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_payments.py",
+    "passed": true,
+    "total": 6,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.177,
+    "stdout_tail": "......                                                                   [100%]\n6 passed in 0.11s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-08-71icaf94/issue-08-judge/.junit/visible.xml"
+  },
+  "verifier": {
+    "label": "verifier",
+    "command": "pytest -q --junitxml=/workspace/.junit/verifier.xml test_idempotency.py",
+    "passed": true,
+    "total": 1,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.116,
+    "stdout_tail": ".                                                                        [100%]\n1 passed in 0.04s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-08-71icaf94/issue-08-judge/.junit/verifier.xml"
+  },
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 3,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.152,
+    "stdout_tail": "...                                                                      [100%]\n3 passed in 0.07s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-08-71icaf94/issue-08-judge/.junit/gold.xml"
+  },
+  "mutation": [
+    {
+      "mutant_id": "m08-1",
+      "description": "original bug: creates payment before checking idempotency key, allowing duplicates on retry",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m08-2",
+      "description": "obvious-path-only fix: checks key before creating but only per-user, allows cross-user duplicates",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m08-3",
+      "description": "sequential-only fix: uses SELECT FOR UPDATE which SQLite doesn't fully support for concurrency",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m08-4",
+      "description": "returns right value (200 for replay) but wrong state (creates duplicate payment row)",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m08-5",
+      "description": "weakens-the-test fix: visible test only checks 201, ignores idempotency replay behavior",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ],
+  "decision": "ACCEPT",
+  "runtime_sec": 372.708,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-08-splitspec"
+}

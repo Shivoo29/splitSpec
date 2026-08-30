@@ -1,0 +1,93 @@
+--- a/app/routes/registrations.py
++++ b/app/routes/registrations.py
+@@ -151,6 +151,8 @@
+     reg = session.get(Registration, registration_id)
+     if reg is None:
+         raise HTTPException(status_code=404, detail="registration not found")
++    if reg.user_id != user.id:
++        raise HTTPException(status_code=403, detail="not authorized to cancel this registration")
+     if reg.status == "cancelled":
+         raise HTTPException(status_code=400, detail="registration already cancelled")
+     reg.status = "cancelled"
+--- a/visible_tests/issue-06/test_cancel_comprehensive.py
++++ b/visible_tests/issue-06/test_cancel_comprehensive.py
+@@ -0,0 +1,58 @@
++"""Comprehensive tests for cancellation ownership checks."""
++from __future__ import annotations
++
++
++async def test_cancel_own_registration_succeeds(client, auth_headers, tokens):
++    # Alice cancels her own registration (id=3)
++    r = await client.delete("/registrations/3", headers=auth_headers(tokens["alice"]))
++    assert r.status_code == 200
++    assert r.json()["status"] == "cancelled"
++
++
++async def test_cancel_others_registration_fails(client, auth_headers, tokens):
++    # Bob tries to cancel Alice's registration (id=1)
++    r = await client.delete("/registrations/1", headers=auth_headers(tokens["bob"]))
++    assert r.status_code == 403
++    
++    # Verify Alice's registration is still confirmed
++    r = await client.get("/registrations", headers=auth_headers(tokens["alice"]))
++    assert r.status_code == 200
++    registrations = r.json()
++    reg1 = next((reg for reg in registrations if reg["id"] == 1), None)
++    assert reg1 is not None
++    assert reg1["status"] == "confirmed"
++
++
++async def test_cancel_cancelled_registration_fails(client, auth_headers, tokens):
++    # Bob's registration (id=2) is already cancelled
++    r = await client.delete("/registrations/2", headers=auth_headers(tokens["bob"]))
++    assert r.status_code == 400
++    assert "already cancelled" in r.json()["detail"]
++
++
++async def test_cancel_nonexistent_registration_fails(client, auth_headers, tokens):
++    # Try to cancel a registration that doesn't exist
++    r = await client.delete("/registrations/999", headers=auth_headers(tokens["alice"]))
++    assert r.status_code == 404
++    assert "not found" in r.json()["detail"]
++
++
++async def test_multiple_users_cannot_cancel_each_others_registrations(client, auth_headers, tokens):
++    # Carol tries to cancel Alice's registration (id=1)
++    r = await client.delete("/registrations/1", headers=auth_headers(tokens["carol"]))
++    assert r.status_code == 403
++    
++    # Dana tries to cancel Carol's registration (id=4)
++    r = await client.delete("/registrations/4", headers=auth_headers(tokens["dana"]))
++    assert r.status_code == 403
++    
++    # Verify both registrations are still confirmed
++    r = await client.get("/registrations", headers=auth_headers(tokens["alice"]))
++    alice_regs = r.json()
++    reg1 = next((reg for reg in alice_regs if reg["id"] == 1), None)
++    assert reg1["status"] == "confirmed"
++    
++    r = await client.get("/registrations", headers=auth_headers(tokens["carol"]))
++    carol_regs = r.json()
++    reg4 = next((reg for reg in carol_regs if reg["id"] == 4), None)
++    assert reg4["status"] == "confirmed"
+--- a/visible_tests/issue-06/test_cancel_ownership.py
++++ b/visible_tests/issue-06/test_cancel_ownership.py
+@@ -0,0 +1,18 @@
++"""Visible: test that cancellation requires ownership."""
++from __future__ import annotations
++
++
++async def test_cancel_others_registration_is_forbidden(client, auth_headers, tokens):
++    # Alice (user_id=1) owns registration_id=1
++    # Bob (user_id=2) should not be able to cancel Alice's registration
++    r = await client.delete("/registrations/1", headers=auth_headers(tokens["bob"]))
++    assert r.status_code == 403
++    
++    # Verify the registration is still confirmed (not cancelled)
++    r = await client.get("/registrations", headers=auth_headers(tokens["alice"]))
++    assert r.status_code == 200
++    registrations = r.json()
++    # Find registration_id=1
++    reg1 = next((reg for reg in registrations if reg["id"] == 1), None)
++    assert reg1 is not None
++    assert reg1["status"] == "confirmed"

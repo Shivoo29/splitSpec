@@ -1,0 +1,96 @@
+{"ts": 1788119196.695342, "actor": "contract", "kind": "call", "case_id": "issue-11", "model": "openai/gpt-oss-120b"}
+{"ts": 1788119196.6955059, "actor": "contract", "kind": "tokens", "input_tokens": 969, "output_tokens": 281, "model": "openai/gpt-oss-120b"}
+{"ts": 1788119196.695541, "actor": "contract", "kind": "parsed", "case_id": "issue-11", "confidence": "low", "n_invariants": 0, "n_ambiguities": 6}
+{"ts": 1788119197.88805, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 881, "output_tokens": 16, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119197.888923, "actor": "verifier", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788119197.9051576, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 762, "output_tokens": 36, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119197.9058573, "actor": "fixer", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788119200.3401864, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 1300, "output_tokens": 30, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119200.3404162, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "visible_tests/issue-11/test_registrations.py", "chars": 1106, "truncated": false}
+{"ts": 1788119202.1963484, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 1669, "output_tokens": 23, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119202.196553, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "app/routes/registrations.py", "chars": 5392, "truncated": false}
+{"ts": 1788119205.4044578, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 3244, "output_tokens": 431, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119205.4046612, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_issue_11.py", "chars": 1386}
+{"ts": 1788119207.5245771, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 3704, "output_tokens": 27, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119208.6445143, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_issue_11.py"], "exit_code": 0, "duration_sec": 1.12}
+{"ts": 1788119210.4944482, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 4041, "output_tokens": 20, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119210.4946804, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "app/cache.py", "chars": 701, "truncated": false}
+{"ts": 1788119212.3497233, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 4270, "output_tokens": 25, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119212.3506942, "actor": "verifier", "kind": "tool_call", "tool": "search", "pattern": "cache.get", "matches": 2}
+{"ts": 1788119214.7951055, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 4361, "output_tokens": 25, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119214.795973, "actor": "verifier", "kind": "tool_call", "tool": "search", "pattern": "cache.set", "matches": 2}
+{"ts": 1788119216.7404919, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 4452, "output_tokens": 25, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119216.7412677, "actor": "verifier", "kind": "tool_call", "tool": "search", "pattern": "cache.invalidate", "matches": 3}
+{"ts": 1788119219.4095824, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1139, "output_tokens": 22, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119219.4098134, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "visible_tests/issue-11/test_registrations.py", "chars": 1106, "truncated": false}
+{"ts": 1788119220.121993, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 4560, "output_tokens": 458, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119220.1221964, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_issue_11_v2.py", "chars": 1575}
+{"ts": 1788119222.0121613, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 5050, "output_tokens": 30, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119223.2103703, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_issue_11_v2.py"], "exit_code": 1, "duration_sec": 1.198}
+{"ts": 1788119225.1950428, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 5649, "output_tokens": 18, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119225.195225, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "seed.py", "chars": 4466, "truncated": false}
+{"ts": 1788119227.7991834, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1446, "output_tokens": 34, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119227.7994115, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/routes/registrations.py", "chars": 5392, "truncated": false}
+{"ts": 1788119228.0113027, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 7295, "output_tokens": 408, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119228.011566, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_issue_11_v3.py", "chars": 1248}
+{"ts": 1788119228.823406, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 2786, "output_tokens": 13, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119228.8236482, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/models.py", "chars": 5001, "truncated": false}
+{"ts": 1788119232.4071286, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 7735, "output_tokens": 30, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119232.714376, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4030, "output_tokens": 29, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119232.7146132, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/db.py", "chars": 1178, "truncated": false}
+{"ts": 1788119233.5418658, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_issue_11_v3.py"], "exit_code": 0, "duration_sec": 1.134}
+{"ts": 1788119233.6452851, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4337, "output_tokens": 13, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119233.645456, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/cache.py", "chars": 701, "truncated": false}
+{"ts": 1788119240.3942597, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 7938, "output_tokens": 592, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119240.3944745, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_issue_11_v4.py", "chars": 1865}
+{"ts": 1788119245.6203325, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 8562, "output_tokens": 30, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119246.7451057, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_issue_11_v4.py"], "exit_code": 0, "duration_sec": 1.124}
+{"ts": 1788119248.073961, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4529, "output_tokens": 28, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119248.0741515, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/main.py", "chars": 1011, "truncated": false}
+{"ts": 1788119260.1159084, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4808, "output_tokens": 29, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119260.1160955, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "conftest.py", "chars": 1060, "truncated": false}
+{"ts": 1788119267.119975, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 8765, "output_tokens": 25, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119267.120883, "actor": "verifier", "kind": "tool_call", "tool": "search", "pattern": "list_mine", "matches": 2}
+{"ts": 1788119271.4063823, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 8918, "output_tokens": 23, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119271.406622, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "app/routes/registrations.py", "chars": 5392, "truncated": false}
+{"ts": 1788119275.9199524, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 10493, "output_tokens": 284, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119275.9202125, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_issue_11_final.py", "chars": 1022}
+{"ts": 1788119281.3097544, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 10808, "output_tokens": 374, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119281.3100116, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_issue_11_final.py", "chars": 1237}
+{"ts": 1788119287.599586, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 11213, "output_tokens": 29, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119288.6716688, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_issue_11_final.py"], "exit_code": 1, "duration_sec": 1.072}
+{"ts": 1788119293.334016, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 11842, "output_tokens": 19, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119293.334197, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "conftest.py", "chars": 1060, "truncated": false}
+{"ts": 1788119298.9627888, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 12199, "output_tokens": 395, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119298.963059, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_issue_11_final.py", "chars": 1312}
+{"ts": 1788119305.416555, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 12625, "output_tokens": 29, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119306.4815512, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_issue_11_final.py"], "exit_code": 0, "duration_sec": 1.065}
+{"ts": 1788119313.0714662, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 12826, "output_tokens": 645, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119313.0716755, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_issue_11_final.py", "chars": 2087}
+{"ts": 1788119316.9015813, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 13502, "output_tokens": 29, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119317.9798708, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_issue_11_final.py"], "exit_code": 0, "duration_sec": 1.078}
+{"ts": 1788119326.30583, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 5126, "output_tokens": 24, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119326.3060386, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "seed.py", "chars": 4466, "truncated": false}
+{"ts": 1788119327.788416, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 13703, "output_tokens": 508, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119327.788502, "actor": "verifier", "kind": "tool_call", "tool": "finish", "chars": 1731}
+{"ts": 1788119327.7885268, "actor": "verifier", "kind": "agent_end", "stop_reason": "finished", "final_message_len": 1731, "calls": 27, "tokens_generated": 4548, "billed_tokens": 206153}
+{"ts": 1788119327.7886014, "actor": "verifier", "kind": "test", "case_id": "issue-11", "stop_reason": "finished", "filename": "test_issue_11_final.py", "invariant": "Registrations, once created or re-activated (following cancellation), must be immediately visible in the user's registration list.", "confidence": "low", "n_assumptions": 2, "contents_len": 1220}
+{"ts": 1788119420.370426, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 6565, "output_tokens": 42, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119421.4921882, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-11/test_registrations.py", "-v"], "exit_code": 0, "duration_sec": 1.121}
+{"ts": 1788119429.5867078, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 6856, "output_tokens": 188, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119429.5882857, "actor": "fixer", "kind": "tool_call", "tool": "search", "pattern": "cache", "matches": 24}
+{"ts": 1788119446.0082114, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8239, "output_tokens": 45, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119446.0084226, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/routes/events.py", "chars": 3946, "truncated": false}
+{"ts": 1788119514.6148455, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 9322, "output_tokens": 3851, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788119514.615043, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/models.py", "chars": 5001, "truncated": false}
+{"ts": 1788119582.5178154, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 14396, "output_tokens": 8000, "finish_reason": "length", "tool_calls": 0}
+{"ts": 1788119582.517887, "actor": "fixer", "kind": "agent_end", "stop_reason": "length", "final_message_len": 35907, "calls": 14, "tokens_generated": 12354, "billed_tokens": 86695}
+{"ts": 1788119582.5198796, "actor": "fixer", "kind": "patch", "case_id": "issue-11", "stop_reason": "length", "stop_ok": false, "files": [], "lines_added": 0, "lines_removed": 0, "touched_tests": false, "diff_len": 0}
+{"ts": 1788119582.520871, "actor": "graph", "kind": "freeze", "case_id": "issue-11", "mode": "splitspec", "filename": "test_issue_11_final.py", "frozen_sha256": "1dd8c4c148bdd2a03ad5315054f0a5302ce58c128f8f71e7f7a69be6954cfee9"}
+{"ts": 1788119582.5211084, "actor": "gate", "kind": "validity", "case_id": "issue-11", "test_filename": "test_issue_11_final.py", "skipped": "no_buggy_variant", "passed": false}
+{"ts": 1788119583.638359, "actor": "judge", "kind": "suite", "case_id": "issue-11", "label": "visible", "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_registrations.py", "exit_code": 0, "passed": true, "total": 3, "failures": 0, "errors": 0, "duration_sec": 1.114}
+{"ts": 1788119583.6384122, "actor": "judge", "kind": "verifier_skipped", "case_id": "issue-11", "mode": "splitspec", "reason": "no_frozen_test"}
+{"ts": 1788119584.7683103, "actor": "judge", "kind": "suite", "case_id": "issue-11", "label": "gold", "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold", "exit_code": 0, "passed": true, "total": 4, "failures": 0, "errors": 0, "duration_sec": 1.13}
+{"ts": 1788119587.9801676, "actor": "mutation", "kind": "score", "case_id": "issue-11", "test_filename": "test_issue_11_final.py", "killed": 0, "denominator": 3, "score": 0.0, "mutants": ["m01-hard-deletes-on-cancel", "m02-hides-cancelled-from-list", "m03-auto-reconfirms"], "excluded_unkillable": []}
+{"ts": 1788119587.9802263, "actor": "graph", "kind": "mutation", "case_id": "issue-11", "mode": "splitspec", "killed": 0, "denominator": 3, "path": "artifacts/issue-11-splitspec/mutation_results.json"}
+{"ts": 1788119587.9849377, "actor": "report", "kind": "written", "case_id": "issue-11", "mode": "splitspec", "artifact_dir": "artifacts/issue-11-splitspec", "degraded": false, "cost_usd": 0.0, "runtime_sec": 523.466, "models": [["contract", "openai/gpt-oss-120b"], ["fixer", "devstral-2512"], ["verifier", "gemini-3.1-flash-lite"]]}

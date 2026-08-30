@@ -1,0 +1,201 @@
+--- a/app/routes/events.py
++++ b/app/routes/events.py
+@@ -104,7 +104,7 @@
+         return cached
+     total = session.scalar(select(func.count()).select_from(Event)) or 0
+     rows = session.scalars(
+-        select(Event).order_by(Event.starts_at.asc(), Event.id.asc()).limit(limit).offset(offset - 1)
++        select(Event).order_by(Event.starts_at.asc(), Event.id.asc()).limit(limit).offset(offset)
+     ).all()
+     payload = {
+         "items": [event_payload(event) for event in rows],
+--- a/test_final_verification.py
++++ b/test_final_verification.py
+@@ -0,0 +1,59 @@
++"""Final verification test for pagination fix."""
++import pytest
++
++
++@pytest.mark.asyncio
++async def test_pagination_fix_verification(client):
++    """Verify that the pagination off-by-one issue is fixed."""
++    
++    # Get all events without pagination
++    all_response = await client.get("/events")
++    all_events = all_response.json()
++    all_ids = [e["id"] for e in all_events["items"]]
++    total = all_events["total"]
++    
++    print(f"\n=== Pagination Fix Verification ===")
++    print(f"Total events: {total}")
++    print(f"All events (unpaginated): {all_ids}")
++    
++    # Test case 1: offset=0, limit=2 (first page)
++    page1 = await client.get("/events", params={"limit": 2, "offset": 0})
++    page1_ids = [e["id"] for e in page1.json()["items"]]
++    print(f"\nPage 1 (offset=0, limit=2): {page1_ids}")
++    assert page1_ids == [3, 1], f"Expected [3, 1], got {page1_ids}"
++    
++    # Test case 2: offset=2, limit=2 (second page)
++    page2 = await client.get("/events", params={"limit": 2, "offset": 2})
++    page2_ids = [e["id"] for e in page2.json()["items"]]
++    print(f"Page 2 (offset=2, limit=2): {page2_ids}")
++    assert page2_ids == [2], f"Expected [2], got {page2_ids}"
++    
++    # Test case 3: Verify no overlap between pages
++    page1_set = set(page1_ids)
++    page2_set = set(page2_ids)
++    overlap = page1_set.intersection(page2_set)
++    print(f"Overlap between pages: {overlap}")
++    assert len(overlap) == 0, f"Pages should not overlap, but found: {overlap}"
++    
++    # Test case 4: Concatenate all pages and verify it matches unpaginated
++    concatenated = page1_ids + page2_ids
++    print(f"\nConcatenated pages: {concatenated}")
++    print(f"Unpaginated: {all_ids}")
++    assert concatenated == all_ids, f"Concatenated pages should match unpaginated"
++    
++    # Test case 5: Test with limit=1 (most granular)
++    print(f"\n=== Testing with limit=1 ===")
++    paginated_ids = []
++    for offset in range(0, total):
++        page = await client.get("/events", params={"limit": 1, "offset": offset})
++        page_ids = [e["id"] for e in page.json()["items"]]
++        paginated_ids.extend(page_ids)
++        print(f"Offset {offset}: {page_ids}")
++    
++    print(f"All paginated (limit=1): {paginated_ids}")
++    assert paginated_ids == all_ids, f"Expected {all_ids}, got {paginated_ids}"
++    
++    # Test case 6: Verify no duplicates in any pagination scenario
++    assert len(paginated_ids) == len(set(paginated_ids)), "Duplicate events found"
++    
++    print(f"\n✓ All pagination tests passed!")
+--- a/test_pagination_comprehensive.py
++++ b/test_pagination_comprehensive.py
+@@ -0,0 +1,61 @@
++"""Comprehensive test to verify pagination works correctly."""
++import pytest
++
++
++@pytest.mark.asyncio
++async def test_pagination_comprehensive(client):
++    """Test that all paginated pages concatenate to match unpaginated results."""
++    # Get all events without pagination
++    all_events = await client.get("/events")
++    all_ids = [e["id"] for e in all_events.json()["items"]]
++    total = all_events.json()["total"]
++    
++    print(f"All events: {all_ids}")
++    print(f"Total: {total}")
++    
++    # Test with limit=1 (most granular)
++    paginated_ids = []
++    for offset in range(0, total):
++        page = await client.get("/events", params={"limit": 1, "offset": offset})
++        page_ids = [e["id"] for e in page.json()["items"]]
++        paginated_ids.extend(page_ids)
++        print(f"Offset {offset}: {page_ids}")
++    
++    print(f"Paginated (limit=1): {paginated_ids}")
++    assert paginated_ids == all_ids, f"Expected {all_ids}, got {paginated_ids}"
++    
++    # Test with limit=2
++    paginated_ids = []
++    for offset in range(0, total, 2):
++        page = await client.get("/events", params={"limit": 2, "offset": offset})
++        page_ids = [e["id"] for e in page.json()["items"]]
++        paginated_ids.extend(page_ids)
++        print(f"Offset {offset}: {page_ids}")
++    
++    print(f"Paginated (limit=2): {paginated_ids}")
++    assert paginated_ids == all_ids, f"Expected {all_ids}, got {paginated_ids}"
++    
++    # Verify no duplicates
++    assert len(paginated_ids) == len(set(paginated_ids)), "Duplicate events found in pagination"
++
++
++@pytest.mark.asyncio
++async def test_pagination_no_overlap(client):
++    """Test that pages don't overlap."""
++    # Get page 1
++    page1 = await client.get("/events", params={"limit": 2, "offset": 0})
++    page1_ids = [e["id"] for e in page1.json()["items"]]
++    
++    # Get page 2
++    page2 = await client.get("/events", params={"limit": 2, "offset": 2})
++    page2_ids = [e["id"] for e in page2.json()["items"]]
++    
++    # Verify no overlap
++    page1_set = set(page1_ids)
++    page2_set = set(page2_ids)
++    overlap = page1_set.intersection(page2_set)
++    
++    assert len(overlap) == 0, f"Pages overlap: {overlap}"
++    print(f"Page 1: {page1_ids}")
++    print(f"Page 2: {page2_ids}")
++    print(f"No overlap: ✓")
+--- a/test_pagination_issue.py
++++ b/test_pagination_issue.py
+@@ -0,0 +1,36 @@
++"""Test to verify pagination off-by-one issue."""
++import pytest
++from httpx import AsyncClient
++
++
++@pytest.mark.asyncio
++async def test_pagination_concatenation():
++    """Test that paginated results match unpaginated results."""
++    async with AsyncClient(app=app, base_url="http://test") as client:
++        # Get all events without pagination
++        all_events = await client.get("/events")
++        all_ids = [e["id"] for e in all_events.json()["items"]]
++        
++        # Get events with pagination
++        page1 = await client.get("/events", params={"limit": 2, "offset": 0})
++        page2 = await client.get("/events", params={"limit": 2, "offset": 2})
++        
++        page1_ids = [e["id"] for e in page1.json()["items"]]
++        page2_ids = [e["id"] for e in page2.json()["items"]]
++        
++        # Concatenate paginated results
++        paginated_ids = page1_ids + page2_ids
++        
++        print(f"All events: {all_ids}")
++        print(f"Page 1: {page1_ids}")
++        print(f"Page 2: {page2_ids}")
++        print(f"Paginated: {paginated_ids}")
++        
++        # They should match
++        assert paginated_ids == all_ids, f"Expected {all_ids}, got {paginated_ids}"
++
++
++if __name__ == "__main__":
++    from app.main import app
++    import asyncio
++    asyncio.run(test_pagination_concatenation())
+--- a/test_pagination_simple.py
++++ b/test_pagination_simple.py
+@@ -0,0 +1,22 @@
++"""Simple test to check pagination behavior."""
++import pytest
++
++
++@pytest.mark.asyncio
++async def test_pagination_offset_zero(client):
++    """Test that offset=0 returns the first page correctly."""
++    # Get first page with offset=0
++    page1 = await client.get("/events", params={"limit": 2, "offset": 0})
++    page1_ids = [e["id"] for e in page1.json()["items"]]
++    
++    # Get second page with offset=2
++    page2 = await client.get("/events", params={"limit": 2, "offset": 2})
++    page2_ids = [e["id"] for e in page2.json()["items"]]
++    
++    print(f"Page 1 (offset=0): {page1_ids}")
++    print(f"Page 2 (offset=2): {page2_ids}")
++    
++    # Page 1 should have [3, 1] (first 2 events)
++    # Page 2 should have [2] (remaining event)
++    assert page1_ids == [3, 1], f"Expected [3, 1], got {page1_ids}"
++    assert page2_ids == [2], f"Expected [2], got {page2_ids}"

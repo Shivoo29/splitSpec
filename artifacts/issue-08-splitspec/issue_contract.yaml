@@ -1,0 +1,37 @@
+case_id: issue-08
+summary: A payment request retried with the same Idempotency-Key must not create a
+  second payment record or trigger a second charge.
+invariants:
+- For any given Idempotency-Key value, the payment service must create at most one
+  payment record and trigger at most one external charge, regardless of how many times
+  the client repeats the request.
+- "When a request with a previously seen Idempotency-Key is received, the service\
+  \ must return the same response (e.g., payment ID, status) as the original request\
+  \ without performing the side\u2011effect again."
+inputs:
+- HTTP POST to the payment endpoint with a JSON body describing a payment and an Idempotency-Key
+  header; the request is sent, times out (client sees no response), and the client
+  repeats the identical request with the same Idempotency-Key.
+- Concurrent or sequential retries of the same request with identical Idempotency-Key
+  under normal operating conditions.
+expected_outputs:
+- Exactly one payment record persisted in the database for the given Idempotency-Key.
+- Exactly one external charge (e.g., bank transaction) issued for the given Idempotency-Key.
+- The HTTP response to the retry contains the same payment identifier and status as
+  the original successful response.
+- "No error or duplicate\u2011creation response is returned; the service signals successful\
+  \ idempotent handling."
+out_of_scope:
+- How the client detects a timeout or decides to retry.
+- The internal storage mechanism for Idempotency-Key values.
+- Performance characteristics or latency of the idempotency check.
+- Any behavior unrelated to the payment creation endpoint (e.g., other routes).
+ambiguities:
+- Exact URL path of the payment endpoint (e.g., /payments, /api/payments).
+- Schema of the request payload required to create a payment.
+- Definition of "timeout" from the client perspective (network timeout, server 5xx,
+  etc.).
+- Whether the service should return the original response body verbatim or may return
+  a generic idempotent acknowledgment.
+- How the external bank charge is observed or logged for verification.
+confidence: medium

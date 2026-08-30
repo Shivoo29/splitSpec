@@ -1,0 +1,160 @@
+{
+  "case_id": "issue-05",
+  "mode": "splitspec",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "verifier",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-3.1-flash-lite",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-05",
+    "summary": "The ticket retrieval endpoint must restrict access to the ticket owner and must not disclose ticket details to other authenticated users.",
+    "invariants": [
+      "When an authenticated user requests a ticket that they do not own, the API must not return the ticket's details."
+    ],
+    "inputs": [
+      "Authenticated GET request to the ticket endpoint (e.g., /tickets/{ticket_id}) where the ticket_id belongs to a different user than the requester."
+    ],
+    "expected_outputs": [
+      "The response must be an error status (e.g., 403 Forbidden or 404 Not Found) and must not contain any ticket detail fields."
+    ],
+    "out_of_scope": [
+      "Ticket creation, updating, deletion, payment processing, barcode generation, and any behavior of other routes."
+    ],
+    "ambiguities": [],
+    "confidence": "high"
+  },
+  "patch": {
+    "case_id": "issue-05",
+    "diff": "--- a/app/routes/tickets.py\n+++ b/app/routes/tickets.py\n@@ -46,4 +46,7 @@\n     # but a revoked ticket is not readable.\n     if ticket.registration.status != \"confirmed\":\n         raise HTTPException(status_code=404, detail=\"ticket revoked by cancellation\")\n+    # Users can only access their own tickets\n+    if ticket.user_id != user.id:\n+        raise HTTPException(status_code=404, detail=\"ticket not found\")\n     return ticket_payload(ticket)\n--- a/test_manual_verification.py\n+++ b/test_manual_verification.py\n@@ -0,0 +1,48 @@\n+\"\"\"Manual verification of the fix.\"\"\"\n+import pytest\n+import httpx\n+import pytest_asyncio\n+from app.main import create_app\n+from app.timeutil import FixedClock\n+from seed import ALICE_TOKEN, BOB_TOKEN, seed\n+\n+FIXED_NOW = \"2026-01-01T12:00:00+00:00\"\n+\n+\n+@pytest_asyncio.fixture\n+async def client():\n+    application = create_app(\"sqlite://\", clock=FixedClock.from_iso(FIXED_NOW))\n+    with application.state.sessionmaker() as session:\n+        seed(session)\n+    transport = httpx.ASGITransport(app=application)\n+    async with httpx.AsyncClient(transport=transport, base_url=\"http://test\") as ac:\n+        yield ac\n+\n+\n+@pytest.mark.asyncio\n+async def test_manual_verification(client):\n+    # Alice tries to access her own ticket (ticket 1)\n+    r = await client.get(\"/tickets/1\", headers={\"Authorization\": f\"Bearer {ALICE_TOKEN}\"})\n+    print(f\"Alice accessing her own ticket: {r.status_code}\")\n+    if r.status_code == 200:\n+        print(f\"Response: {r.json()}\")\n+    \n+    # Alice tries to access Carol's ticket (ticket 4)\n+    r = await client.get(\"/tickets/4\", headers={\"Authorization\": f\"Bearer {ALICE_TOKEN}\"})\n+    print(f\"Alice accessing Carol's ticket: {r.status_code}\")\n+    if r.status_code == 200:\n+        print(f\"Response: {r.json()}\")\n+    else:\n+        print(f\"Response: {r.text}\")\n+    \n+    # Bob tries to access Alice's ticket (ticket 1)\n+    r = await client.get(\"/tickets/1\", headers={\"Authorization\": f\"Bearer {BOB_TOKEN}\"})\n+    print(f\"Bob accessing Alice's ticket: {r.status_code}\")\n+    if r.status_code == 200:\n+        print(f\"Response: {r.json()}\")\n+    else:\n+        print(f\"Response: {r.text}\")\n+\n+\n+if __name__ == \"__main__\":\n+    pytest.main([__file__, \"-v\", \"-s\"])\n--- a/visible_tests/issue-05/test_cross_user_access.py\n+++ b/visible_tests/issue-05/test_cross_user_access.py\n@@ -0,0 +1,31 @@\n+\"\"\"Visible: a user cannot read another user's ticket.\"\"\"\n+from __future__ import annotations\n+\n+\n+async def test_user_cannot_read_another_users_ticket(client, auth_headers, tokens):\n+    # Alice (user 1) tries to access Bob's ticket (ticket 2, which belongs to user 2)\n+    # Note: ticket 2 has a cancelled registration, so it should return 404 anyway\n+    # Let's test with Carol's ticket (ticket 4, which belongs to user 3)\n+    r = await client.get(\"/tickets/4\", headers=auth_headers(tokens[\"alice\"]))\n+    # Should return 403 or 404, not 200 with ticket details\n+    assert r.status_code in (403, 404)\n+    # Should not contain ticket details\n+    if r.status_code == 200:\n+        # If it returns 200, that's a bug - it should not contain ticket details\n+        assert \"code\" not in r.json()\n+        assert \"user_id\" not in r.json()\n+    else:\n+        # Expected behavior: error response without ticket details\n+        assert r.status_code in (403, 404)\n+\n+\n+async def test_bob_cannot_read_alices_ticket(client, auth_headers, tokens):\n+    # Bob (user 2) tries to access Alice's ticket (ticket 1, which belongs to user 1)\n+    r = await client.get(\"/tickets/1\", headers=auth_headers(tokens[\"bob\"]))\n+    # Should return 403 or 404, not 200 with ticket details\n+    assert r.status_code in (403, 404)\n+    # Should not contain ticket details\n+    if r.status_code == 200:\n+        # If it returns 200, that's a bug\n+        assert \"code\" not in r.json()\n+        assert \"user_id\" not in r.json()\n",
+    "files_changed": [
+      "app/routes/tickets.py",
+      "test_manual_verification.py",
+      "visible_tests/issue-05/test_cross_user_access.py"
+    ],
+    "lines_added": 82,
+    "lines_removed": 0,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; Fixed cross-user ticket access vulnerability by adding user ownership check in the ticket retrieval endpoint. Modified `app/routes/tickets.py` to verify that the authenticated user owns the requested ticket before returning details. Added test file `visible_tests/issue-05/test_cross_user_access.py` to verify the fix. All tests pass - users can access their own tickets but get 404 errors when trying to access other users' tickets, with no ticket details disclosed."
+  },
+  "verifier_test": {
+    "case_id": "issue-05",
+    "filename": "test_issue_05_reproduction.py",
+    "contents": "from __future__ import annotations\nimport pytest\nfrom httpx import AsyncClient\n\n@pytest.mark.asyncio\nasync def test_cannot_read_others_ticket(client, auth_headers, tokens):\n    # Assume Alice (user 1) owns ticket 1\n    # Bob (user 2) tries to read Alice's ticket\n    r = await client.get(\"/tickets/1\", headers=auth_headers(tokens[\"bob\"]))\n    \n    # The requirement is that it must not return the ticket's details.\n    # A 403 or 404 is appropriate for unauthorized access to a specific resource.\n    assert r.status_code in [403, 404], f\"Expected 403 or 404, got {r.status_code}\"\n    \n    # Ensure details are not returned\n    data = r.json()\n    assert \"code\" not in data\n    assert \"user_id\" not in data\n",
+    "run_command": "pytest test_issue_05_reproduction.py",
+    "invariant": "When an authenticated user requests a ticket that they do not own, the API must not return the ticket's details and should return a 403 Forbidden or 404 Not Found error.",
+    "assumptions": [
+      "The test assumes that ticket 1 is owned by a user other than 'bob' (specifically, it is owned by 'alice').",
+      "The test assumes the existence of 'alice' and 'bob' in the test database.",
+      "The test assumes authentication tokens are correctly provided."
+    ],
+    "confidence": "high",
+    "frozen_sha256": "cba92970aa77172164abebd3005c6e81c1cb7b3341381f5bd026c4a0e00d6d0d"
+  },
+  "validity": {
+    "compiles": true,
+    "runs": true,
+    "fails_on_original_bug": true,
+    "passed": true,
+    "reason": "test failed on the buggy code (1 failures) as expected"
+  },
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_tickets.py",
+    "passed": true,
+    "total": 3,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.13,
+    "stdout_tail": "...                                                                      [100%]\n3 passed in 0.06s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-05-uhd2lh00/issue-05-judge/.junit/visible.xml"
+  },
+  "verifier": {
+    "label": "verifier",
+    "command": "pytest -q --junitxml=/workspace/.junit/verifier.xml test_issue_05_reproduction.py",
+    "passed": true,
+    "total": 1,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.092,
+    "stdout_tail": ".                                                                        [100%]\n1 passed in 0.04s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-05-uhd2lh00/issue-05-judge/.junit/verifier.xml"
+  },
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": false,
+    "total": 3,
+    "failures": 2,
+    "errors": 0,
+    "duration_sec": 1.161,
+    "stdout_tail": "F.F                                                                      [100%]\n=================================== FAILURES ===================================\n_________________ test_every_ticket_is_403_for_every_non_owner _________________\n\nclient = <httpx.AsyncClient object at 0x7f8b1f1827e0>\nauth_headers = <function auth_headers.<locals>._headers at 0x7f8b1f038540>\ntokens = {'alice': 'alice-token-0001', 'bob': 'bob-token-0002', 'carol': 'carol-token-0003', 'dana': 'dana-token-0004'}\n\n    async def test_every_ticket_is_403_for_every_non_owner(client, auth_headers, tokens):\n        for ticket_id, owner_id in OWNERS.items():\n            for name, user_id in NAMES.items():\n                if user_id == owner_id:\n                    continue\n                r = await client.get(f\"/tickets/{ticket_id}\", headers=auth_headers(tokens[name]))\n>               assert r.status_code == 403, (ticket_id, name)\nE               AssertionError: (1, 'bob')\nE               assert 404 == 403\nE                +  where 404 = <Response [404 Not Found]>.status_code\n\ngold/test_tickets.py:14: AssertionError\n____________ test_revoked_ticket_of_another_user_still_reports_403 _____________\n\nclient = <httpx.AsyncClient object at 0x7f8b1f19b830>\nauth_headers = <function auth_headers.<locals>._headers at 0x7f8b1f096020>\ntokens = {'alice': 'alice-token-0001', 'bob': 'bob-token-0002', 'carol': 'carol-token-0003', 'dana': 'dana-token-0004'}\n\n    async def test_revoked_ticket_of_another_user_still_reports_403(client, auth_headers, tokens):\n        alice = auth_headers(tokens[\"alice\"])\n        await client.delete(\"/registrations/3\", headers=alice)\n        for name in (\"bob\", \"carol\", \"dana\"):\n            r = await client.get(\"/tickets/3\", headers=auth_headers(tokens[name]))\n>           assert r.status_code == 403, name\nE           AssertionError: bob\nE           assert 404 == 403\nE            +  where 404 = <Response [404 Not Found]>.status_code\n\ngold/test_tickets.py:28: AssertionError\n=========================== short test summary info ============================\nFAILED gold/test_tickets.py::test_every_ticket_is_403_for_every_non_owner - A...\nFAILED gold/test_tickets.py::test_revoked_ticket_of_another_user_still_reports_403\n2 failed, 1 passed in 0.09s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-05-uhd2lh00/issue-05-judge/.junit/gold.xml"
+  },
+  "mutation": [
+    {
+      "mutant_id": "m05-1",
+      "description": "original bug: ticket ownership is never checked when reading a ticket",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m05-2",
+      "description": "ownership is verified only after the revoked check, leaking revocation state of foreign tickets",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m05-3",
+      "description": "checks against the event creator instead of the ticket owner",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m05-4",
+      "description": "silently weakens the visible tests while the missing ownership check remains",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ],
+  "decision": "ACCEPT",
+  "runtime_sec": 291.299,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-05-splitspec"
+}

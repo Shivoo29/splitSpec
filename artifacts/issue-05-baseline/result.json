@@ -1,0 +1,101 @@
+{
+  "case_id": "issue-05",
+  "mode": "baseline",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-05",
+    "summary": "A user can retrieve full ticket details for a ticket that belongs to a different user, violating the requirement that ticket data be accessible only to its owner.",
+    "invariants": [
+      "When an authenticated request is made to retrieve a ticket, the system must return the ticket details only if the ticket is owned by the requesting user.",
+      "If the ticket is not owned by the requesting user, the system must not return the ticket details and must respond with an access‑denied status."
+    ],
+    "inputs": [
+      "Authenticated GET request for /tickets/{ticket_id} where ticket_id belongs to another user.",
+      "Authenticated GET request for /tickets/{ticket_id} where ticket_id belongs to the requesting user (control case)."
+    ],
+    "expected_outputs": [
+      "For the control case, the response includes the full ticket details with a success status (e.g., 200 OK).",
+      "For the cross‑user request, the response does not include any ticket details and returns an access‑denied status (e.g., 403 Forbidden or 404 Not Found)."
+    ],
+    "out_of_scope": [
+      "Ticket creation, update, or deletion behavior.",
+      "Authorization rules for admin or privileged roles.",
+      "Non‑ticket related endpoints."
+    ],
+    "ambiguities": [
+      "Exact HTTP status code and error payload to be used for denied access (403 vs 404).",
+      "Whether the system should mask the existence of the ticket (404) or explicitly deny (403).",
+      "Details of the authentication mechanism (e.g., JWT, session cookie) and how ownership is determined."
+    ],
+    "confidence": "high"
+  },
+  "patch": {
+    "case_id": "issue-05",
+    "diff": "--- a/app/routes/tickets.py\n+++ b/app/routes/tickets.py\n@@ -46,4 +46,7 @@\n     # but a revoked ticket is not readable.\n     if ticket.registration.status != \"confirmed\":\n         raise HTTPException(status_code=404, detail=\"ticket revoked by cancellation\")\n+    # Ensure the ticket belongs to the authenticated user\n+    if ticket.user_id != user.id:\n+        raise HTTPException(status_code=404, detail=\"ticket not found\")\n     return ticket_payload(ticket)\n--- a/final_verification_test.py\n+++ b/final_verification_test.py\n@@ -0,0 +1,131 @@\n+\"\"\"Final verification test for the cross-user ticket access fix.\"\"\"\n+import httpx\n+import pytest\n+import pytest_asyncio\n+\n+from app.main import create_app\n+from app.timeutil import FixedClock\n+from seed import ALICE_TOKEN, BOB_TOKEN, CAROL_TOKEN, seed\n+\n+FIXED_NOW = \"2026-01-01T12:00:00+00:00\"\n+\n+\n+@pytest_asyncio.fixture\n+async def client():\n+    application = create_app(\"sqlite://\", clock=FixedClock.from_iso(FIXED_NOW))\n+    with application.state.sessionmaker() as session:\n+        seed(session)\n+    transport = httpx.ASGITransport(app=application)\n+    async with httpx.AsyncClient(transport=transport, base_url=\"http://test\") as ac:\n+        yield ac\n+\n+\n+@pytest_asyncio.fixture\n+def alice_headers():\n+    return {\"Authorization\": f\"Bearer {ALICE_TOKEN}\"}\n+\n+\n+@pytest_asyncio.fixture\n+def bob_headers():\n+    return {\"Authorization\": f\"Bearer {BOB_TOKEN}\"}\n+\n+\n+@pytest_asyncio.fixture\n+def carol_headers():\n+    return {\"Authorization\": f\"Bearer {CAROL_TOKEN}\"}\n+\n+\n+@pytest.mark.asyncio\n+async def test_alice_can_read_own_ticket(client, alice_headers):\n+    \"\"\"Alice should be able to read her own ticket (ticket 1).\"\"\"\n+    r = await client.get(\"/tickets/1\", headers=alice_headers)\n+    assert r.status_code == 200\n+    data = r.json()\n+    assert data[\"id\"] == 1\n+    assert data[\"user_id\"] == 1\n+    assert data[\"code\"] == \"T0001-0001\"\n+\n+\n+@pytest.mark.asyncio\n+async def test_alice_can_read_another_own_ticket(client, alice_headers):\n+    \"\"\"Alice should be able to read her other ticket (ticket 3).\"\"\"\n+    r = await client.get(\"/tickets/3\", headers=alice_headers)\n+    assert r.status_code == 200\n+    data = r.json()\n+    assert data[\"id\"] == 3\n+    assert data[\"user_id\"] == 1\n+    assert data[\"code\"] == \"T0003-0001\"\n+\n+\n+@pytest.mark.asyncio\n+async def test_bob_can_read_own_ticket(client, bob_headers):\n+    \"\"\"Bob should be able to read his own ticket (ticket 2) - but it's cancelled.\"\"\"\n+    r = await client.get(\"/tickets/2\", headers=bob_headers)\n+    # Ticket 2 has cancelled registration, so it should return 404\n+    assert r.status_code == 404\n+\n+\n+@pytest.mark.asyncio\n+async def test_carol_can_read_own_ticket(client, carol_headers):\n+    \"\"\"Carol should be able to read her own ticket (ticket 4).\"\"\"\n+    r = await client.get(\"/tickets/4\", headers=carol_headers)\n+    assert r.status_code == 200\n+    data = r.json()\n+    assert data[\"id\"] == 4\n+    assert data[\"user_id\"] == 3\n+    assert data[\"code\"] == \"T0003-0003\"\n+\n+\n+@pytest.mark.asyncio\n+async def test_alice_cannot_access_bob_ticket(client, alice_headers):\n+    \"\"\"Alice should NOT be able to access Bob's ticket (ticket 2).\"\"\"\n+    r = await client.get(\"/tickets/2\", headers=alice_headers)\n+    # Should return 404 (masking existence) or 403 (explicit denial)\n+    assert r.status_code in [403, 404]\n+\n+\n+@pytest.mark.asyncio\n+async def test_bob_cannot_access_alice_ticket(client, bob_headers):\n+    \"\"\"Bob should NOT be able to access Alice's ticket (ticket 1).\"\"\"\n+    r = await client.get(\"/tickets/1\", headers=bob_headers)\n+    # Should return 404 (masking existence) or 403 (explicit denial)\n+    assert r.status_code in [403, 404]\n+\n+\n+@pytest.mark.asyncio\n+async def test_alice_cannot_access_carol_ticket(client, alice_headers):\n+    \"\"\"Alice should NOT be able to access Carol's ticket (ticket 4).\"\"\"\n+    r = await client.get(\"/tickets/4\", headers=alice_headers)\n+    # Should return 404 (masking existence) or 403 (explicit denial)\n+    assert r.status_code in [403, 404]\n+\n+\n+@pytest.mark.asyncio\n+async def test_bob_cannot_access_carol_ticket(client, bob_headers):\n+    \"\"\"Bob should NOT be able to access Carol's ticket (ticket 4).\"\"\"\n+    r = await client.get(\"/tickets/4\", headers=bob_headers)\n+    # Should return 404 (masking existence) or 403 (explicit denial)\n+    assert r.status_code in [403, 404]\n+\n+\n+@pytest.mark.asyncio\n+async def test_carol_cannot_access_alice_ticket(client, carol_headers):\n+    \"\"\"Carol should NOT be able to access Alice's ticket (ticket 1).\"\"\"\n+    r = await client.get(\"/tickets/1\", headers=carol_headers)\n+    # Should return 404 (masking existence) or 403 (explicit denial)\n+    assert r.status_code in [403, 404]\n+\n+\n+@pytest.mark.asyncio\n+async def test_carol_cannot_access_bob_ticket(client, carol_headers):\n+    \"\"\"Carol should NOT be able to access Bob's ticket (ticket 2).\"\"\"\n+    r = await client.get(\"/tickets/2\", headers=carol_headers)\n+    # Should return 404 (masking existence) or 403 (explicit denial)\n+    assert r.status_code in [403, 404]\n+\n+\n+@pytest.mark.asyncio\n+async def test_nonexistent_ticket_returns_404(client, alice_headers):\n+    \"\"\"Non-existent ticket should return 404.\"\"\"\n+    r = await client.get(\"/tickets/999\", headers=alice_headers)\n+    assert r.status_code == 404\n--- a/test_cross_user_access.py\n+++ b/test_cross_user_access.py\n@@ -0,0 +1,97 @@\n+\"\"\"Test to verify cross-user ticket access vulnerability.\"\"\"\n+import httpx\n+import pytest\n+import pytest_asyncio\n+\n+from app.main import create_app\n+from app.timeutil import FixedClock\n+from seed import ALICE_TOKEN, BOB_TOKEN, CAROL_TOKEN, seed\n+\n+FIXED_NOW = \"2026-01-01T12:00:00+00:00\"\n+\n+\n+@pytest_asyncio.fixture\n+async def client():\n+    application = create_app(\"sqlite://\", clock=FixedClock.from_iso(FIXED_NOW))\n+    with application.state.sessionmaker() as session:\n+        seed(session)\n+    transport = httpx.ASGITransport(app=application)\n+    async with httpx.AsyncClient(transport=transport, base_url=\"http://test\") as ac:\n+        yield ac\n+\n+\n+@pytest_asyncio.fixture\n+def alice_headers():\n+    return {\"Authorization\": f\"Bearer {ALICE_TOKEN}\"}\n+\n+\n+@pytest_asyncio.fixture\n+def bob_headers():\n+    return {\"Authorization\": f\"Bearer {BOB_TOKEN}\"}\n+\n+\n+@pytest_asyncio.fixture\n+def carol_headers():\n+    return {\"Authorization\": f\"Bearer {CAROL_TOKEN}\"}\n+\n+\n+@pytest.mark.asyncio\n+async def test_alice_cannot_access_bob_ticket(client, alice_headers):\n+    \"\"\"Alice (user 1) should not be able to access Bob's ticket (ticket 2).\"\"\"\n+    r = await client.get(\"/tickets/2\", headers=alice_headers)\n+    # Should return 403 or 404, not 200 with ticket details\n+    assert r.status_code in [403, 404], f\"Expected 403/404 but got {r.status_code}\"\n+    if r.status_code == 200:\n+        # If it returns 200, it should not contain Bob's ticket data\n+        assert r.json().get(\"user_id\") != 2, \"Alice should not see Bob's ticket\"\n+\n+\n+@pytest.mark.asyncio\n+async def test_bob_cannot_access_alice_ticket(client, bob_headers):\n+    \"\"\"Bob (user 2) should not be able to access Alice's ticket (ticket 1).\"\"\"\n+    r = await client.get(\"/tickets/1\", headers=bob_headers)\n+    # Should return 403 or 404, not 200 with ticket details\n+    assert r.status_code in [403, 404], f\"Expected 403/404 but got {r.status_code}\"\n+    if r.status_code == 200:\n+        # If it returns 200, it should not contain Alice's ticket data\n+        assert r.json().get(\"user_id\") != 1, \"Bob should not see Alice's ticket\"\n+\n+\n+@pytest.mark.asyncio\n+async def test_alice_cannot_access_carol_ticket(client, alice_headers):\n+    \"\"\"Alice (user 1) should not be able to access Carol's ticket (ticket 4).\"\"\"\n+    r = await client.get(\"/tickets/4\", headers=alice_headers)\n+    # Should return 403 or 404, not 200 with ticket details\n+    assert r.status_code in [403, 404], f\"Expected 403/404 but got {r.status_code}\"\n+    if r.status_code == 200:\n+        # If it returns 200, it should not contain Carol's ticket data\n+        assert r.json().get(\"user_id\") != 3, \"Alice should not see Carol's ticket\"\n+\n+\n+if __name__ == \"__main__\":\n+    import asyncio\n+    \n+    async def run_tests():\n+        application = create_app(\"sqlite://\", clock=FixedClock.from_iso(FIXED_NOW))\n+        with application.state.sessionmaker() as session:\n+            seed(session)\n+        transport = httpx.ASGITransport(app=application)\n+        async with httpx.AsyncClient(transport=transport, base_url=\"http://test\") as client:\n+            alice_headers = {\"Authorization\": f\"Bearer {ALICE_TOKEN}\"}\n+            bob_headers = {\"Authorization\": f\"Bearer {BOB_TOKEN}\"}\n+            \n+            print(\"Testing Alice accessing Bob's ticket (ticket 2)...\")\n+            r = await client.get(\"/tickets/2\", headers=alice_headers)\n+            print(f\"Status: {r.status_code}\")\n+            if r.status_code == 200:\n+                print(f\"Response: {r.json()}\")\n+                print(\"VULNERABILITY: Alice can access Bob's ticket!\")\n+            \n+            print(\"\\nTesting Bob accessing Alice's ticket (ticket 1)...\")\n+            r = await client.get(\"/tickets/1\", headers=bob_headers)\n+            print(f\"Status: {r.status_code}\")\n+            if r.status_code == 200:\n+                print(f\"Response: {r.json()}\")\n+                print(\"VULNERABILITY: Bob can access Alice's ticket!\")\n+    \n+    asyncio.run(run_tests())\n--- a/test_vulnerability.py\n+++ b/test_vulnerability.py\n@@ -0,0 +1,51 @@\n+\"\"\"Quick test to demonstrate the vulnerability.\"\"\"\n+import asyncio\n+import httpx\n+\n+from app.main import create_app\n+from app.timeutil import FixedClock\n+from seed import ALICE_TOKEN, BOB_TOKEN, seed\n+\n+FIXED_NOW = \"2026-01-01T12:00:00+00:00\"\n+\n+\n+async def main():\n+    application = create_app(\"sqlite://\", clock=FixedClock.from_iso(FIXED_NOW))\n+    with application.state.sessionmaker() as session:\n+        seed(session)\n+    transport = httpx.ASGITransport(app=application)\n+    async with httpx.AsyncClient(transport=transport, base_url=\"http://test\") as client:\n+        alice_headers = {\"Authorization\": f\"Bearer {ALICE_TOKEN}\"}\n+        bob_headers = {\"Authorization\": f\"Bearer {BOB_TOKEN}\"}\n+        \n+        print(\"=\" * 60)\n+        print(\"Testing Alice accessing Bob's ticket (ticket 2)...\")\n+        print(\"=\" * 60)\n+        r = await client.get(\"/tickets/2\", headers=alice_headers)\n+        print(f\"Status: {r.status_code}\")\n+        if r.status_code == 200:\n+            data = r.json()\n+            print(f\"Response: {data}\")\n+            print(f\"Ticket user_id: {data.get('user_id')}\")\n+            if data.get('user_id') == 2:\n+                print(\"❌ VULNERABILITY: Alice can access Bob's ticket!\")\n+        else:\n+            print(f\"Response: {r.text}\")\n+        \n+        print(\"\\n\" + \"=\" * 60)\n+        print(\"Testing Bob accessing Alice's ticket (ticket 1)...\")\n+        print(\"=\" * 60)\n+        r = await client.get(\"/tickets/1\", headers=bob_headers)\n+        print(f\"Status: {r.status_code}\")\n+        if r.status_code == 200:\n+            data = r.json()\n+            print(f\"Response: {data}\")\n+            print(f\"Ticket user_id: {data.get('user_id')}\")\n+            if data.get('user_id') == 1:\n+                print(\"❌ VULNERABILITY: Bob can access Alice's ticket!\")\n+        else:\n+            print(f\"Response: {r.text}\")\n+\n+\n+if __name__ == \"__main__\":\n+    asyncio.run(main())\n",
+    "files_changed": [
+      "app/routes/tickets.py",
+      "final_verification_test.py",
+      "test_cross_user_access.py",
+      "test_vulnerability.py"
+    ],
+    "lines_added": 282,
+    "lines_removed": 0,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; Fixed cross-user ticket access vulnerability by adding ownership validation in app/routes/tickets.py. The fix adds a single check to ensure that users can only access their own tickets, returning 404 for tickets belonging to other users. All existing tests pass and the vulnerability is resolved."
+  },
+  "verifier_test": null,
+  "validity": null,
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_tickets.py",
+    "passed": true,
+    "total": 3,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.107,
+    "stdout_tail": "...                                                                      [100%]\n3 passed in 0.06s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-05-ptg3ychq/issue-05-judge/.junit/visible.xml"
+  },
+  "verifier": null,
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": false,
+    "total": 3,
+    "failures": 2,
+    "errors": 0,
+    "duration_sec": 1.152,
+    "stdout_tail": "F.F                                                                      [100%]\n=================================== FAILURES ===================================\n_________________ test_every_ticket_is_403_for_every_non_owner _________________\n\nclient = <httpx.AsyncClient object at 0x7f46be9d6a50>\nauth_headers = <function auth_headers.<locals>._headers at 0x7f46be888540>\ntokens = {'alice': 'alice-token-0001', 'bob': 'bob-token-0002', 'carol': 'carol-token-0003', 'dana': 'dana-token-0004'}\n\n    async def test_every_ticket_is_403_for_every_non_owner(client, auth_headers, tokens):\n        for ticket_id, owner_id in OWNERS.items():\n            for name, user_id in NAMES.items():\n                if user_id == owner_id:\n                    continue\n                r = await client.get(f\"/tickets/{ticket_id}\", headers=auth_headers(tokens[name]))\n>               assert r.status_code == 403, (ticket_id, name)\nE               AssertionError: (1, 'bob')\nE               assert 404 == 403\nE                +  where 404 = <Response [404 Not Found]>.status_code\n\ngold/test_tickets.py:14: AssertionError\n____________ test_revoked_ticket_of_another_user_still_reports_403 _____________\n\nclient = <httpx.AsyncClient object at 0x7f46be9ef0b0>\nauth_headers = <function auth_headers.<locals>._headers at 0x7f46be8ea020>\ntokens = {'alice': 'alice-token-0001', 'bob': 'bob-token-0002', 'carol': 'carol-token-0003', 'dana': 'dana-token-0004'}\n\n    async def test_revoked_ticket_of_another_user_still_reports_403(client, auth_headers, tokens):\n        alice = auth_headers(tokens[\"alice\"])\n        await client.delete(\"/registrations/3\", headers=alice)\n        for name in (\"bob\", \"carol\", \"dana\"):\n            r = await client.get(\"/tickets/3\", headers=auth_headers(tokens[name]))\n>           assert r.status_code == 403, name\nE           AssertionError: bob\nE           assert 404 == 403\nE            +  where 404 = <Response [404 Not Found]>.status_code\n\ngold/test_tickets.py:28: AssertionError\n=========================== short test summary info ============================\nFAILED gold/test_tickets.py::test_every_ticket_is_403_for_every_non_owner - A...\nFAILED gold/test_tickets.py::test_revoked_ticket_of_another_user_still_reports_403\n2 failed, 1 passed in 0.09s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-05-ptg3ychq/issue-05-judge/.junit/gold.xml"
+  },
+  "mutation": [],
+  "decision": "REVIEW REQUIRED",
+  "runtime_sec": 454.193,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-05-baseline"
+}

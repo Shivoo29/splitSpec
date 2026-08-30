@@ -1,0 +1,33 @@
+case_id: issue-02
+summary: Paginated event listings must produce a sequence identical to a single unpaginated
+  fetch, without duplicate records or ordering changes between pages.
+invariants:
+- "When fetching events with pagination parameters (e.g., limit/offset or page/size),\
+  \ each page must return a contiguous, non\u2011overlapping slice of the total ordered\
+  \ result set."
+- The concatenation of all paginated pages, in page order, must be exactly the same
+  ordered list as retrieving all events in one request without pagination.
+inputs:
+- A request to the events endpoint with pagination parameters (page number and page
+  size, or limit and offset) under normal, static dataset conditions.
+- A request to the same endpoint without any pagination parameters to retrieve the
+  full list.
+expected_outputs:
+- "Each paginated response contains a list of events sorted according to the API\u2019\
+  s defined ordering (e.g., by event start time, ID, etc.)."
+- No event appears in more than one paginated response.
+- The ordered list obtained by concatenating the paginated responses matches exactly
+  the ordered list returned by the unpaginated request.
+out_of_scope:
+- Changes to the underlying data (e.g., events being added, removed, or updated) between
+  paginated requests.
+- Performance characteristics of pagination (query speed, latency).
+- User interface rendering of the paginated data.
+- Any filtering, search, or authorization logic not directly related to pagination.
+ambiguities:
+- "Exact pagination mechanism used by the API (offset\u2011based vs page\u2011number\u2011\
+  based)."
+- The default sorting key and direction applied to the event list.
+- Whether any hidden filters or default query parameters affect the result set.
+- The size of the dataset required to reliably reproduce the issue.
+confidence: medium

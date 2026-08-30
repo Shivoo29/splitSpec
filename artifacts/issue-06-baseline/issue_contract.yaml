@@ -1,0 +1,23 @@
+case_id: issue-06
+summary: A cancellation request must be rejected when the authenticated user does
+  not own the target registration, leaving the registration unchanged.
+invariants:
+- The CancelRegistration operation must verify that the requester is the owner of
+  the registration identified by the request.
+- If the requester is not the owner, the operation must not modify any data of the
+  registration and must return an error indicating insufficient permission.
+inputs:
+- Authenticated cancel request for a registration ID that belongs to the requester.
+- Authenticated cancel request for a registration ID that belongs to a different user.
+expected_outputs:
+- 'For an owned registration: a successful response and the registration''s status
+  is updated to a cancelled state.'
+- "For a non\u2011owned registration: an error response (e.g., HTTP 403 Forbidden)\
+  \ and the registration's status and all other fields remain exactly as they were\
+  \ prior to the request."
+out_of_scope:
+- Creation, update, or deletion of registrations other than cancellation.
+- Payment processing, event management, ticket issuance, caching, or any unrelated
+  API endpoints.
+ambiguities: []
+confidence: high

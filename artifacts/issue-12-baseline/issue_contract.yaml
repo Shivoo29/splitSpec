@@ -1,0 +1,29 @@
+case_id: issue-12
+summary: The events list endpoint returns a total count that reflects the size of
+  the current page instead of the total number of events stored.
+invariants:
+- When a GET request is made to /events with any limit and offset parameters, the
+  response JSON must contain a field named "total" whose value equals the total number
+  of event records in the database, independent of the limit and offset values.
+inputs:
+- GET /events?limit=2&offset=0 on a database containing N events (N > 2)
+- GET /events?limit=100&offset=0 on the same database
+- GET /events without limit/offset parameters on the same database
+expected_outputs:
+- The "total" field in the response equals N for all requests above.
+- The length of the "events" array in the response matches the requested limit (or
+  the remaining number of events when offset+limit exceeds N).
+- When limit < total, the client can compute that additional pages exist because total
+  > limit.
+out_of_scope:
+- The ordering of events returned.
+- The exact schema of each event object.
+- Authentication or authorization behavior of the endpoint.
+- Performance characteristics of the query.
+ambiguities:
+- "Exact JSON structure (e.g., whether \"total\" is top\u2011level or nested) is not\
+  \ described."
+- Behavior when the database contains zero events is not explicitly documented.
+- Whether the endpoint supports additional filtering parameters that could affect
+  the total count.
+confidence: high

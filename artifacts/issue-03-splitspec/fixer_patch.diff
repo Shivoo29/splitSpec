@@ -1,0 +1,181 @@
+--- a/app/routes/events.py
++++ b/app/routes/events.py
+@@ -13,7 +13,7 @@
+ from app.auth import get_current_user
+ from app.db import get_session
+ from app.models import Event, User
+-from app.timeutil import iso8601_utc
++from app.timeutil import iso8601_utc, to_utc_naive
+ 
+ router = APIRouter(prefix="/events", tags=["events"])
+ 
+@@ -78,7 +78,7 @@
+     event = Event(
+         title=payload.title,
+         description=payload.description,
+-        starts_at=payload.starts_at.replace(tzinfo=None),
++        starts_at=to_utc_naive(payload.starts_at),
+         capacity=payload.capacity,
+         price=money.quantize(payload.price, payload.currency),
+         currency=payload.currency,
+--- a/test_comprehensive_timezone.py
++++ b/test_comprehensive_timezone.py
+@@ -0,0 +1,48 @@
++"""Comprehensive timezone tests."""
++import pytest
++from datetime import datetime, timezone
++
++
++@pytest.mark.parametrize("input_timestamp,expected_utc", [
++    ("2023-09-01T10:00:00+02:00", "2023-09-01T08:00:00+00:00"),  # +2 hours
++    ("2023-09-01T10:00:00-05:00", "2023-09-01T15:00:00+00:00"),  # -5 hours
++    ("2023-09-01T10:00:00Z", "2023-09-01T10:00:00+00:00"),  # UTC
++    ("2023-09-01T10:00:00+00:00", "2023-09-01T10:00:00+00:00"),  # UTC with offset
++])
++async def test_various_timezones(client, auth_headers, tokens, input_timestamp, expected_utc):
++    """Test that various timezone offsets are correctly converted to UTC."""
++    r = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "Test Event",
++            "starts_at": input_timestamp,
++            "capacity": 5,
++            "price": "10.00",
++        },
++    )
++    assert r.status_code == 201
++    
++    returned_timestamp = r.json()["starts_at"]
++    print(f"Input: {input_timestamp}, Returned: {returned_timestamp}, Expected: {expected_utc}")
++    
++    # The returned timestamp should be the UTC equivalent
++    assert returned_timestamp == expected_utc
++    
++    # Also verify by parsing and comparing
++    original = datetime.fromisoformat(input_timestamp)
++    returned = datetime.fromisoformat(returned_timestamp)
++    expected = datetime.fromisoformat(expected_utc)
++    
++    assert original.astimezone(timezone.utc) == returned.astimezone(timezone.utc)
++    assert returned.astimezone(timezone.utc) == expected.astimezone(timezone.utc)
++    
++    # Check GET endpoint too
++    event_id = r.json()["id"]
++    got = await client.get(f"/events/{event_id}")
++    assert got.status_code == 200
++    assert got.json()["starts_at"] == expected_utc
++
++
++if __name__ == "__main__":
++    pytest.main([__file__, "-v", "-s"])
+--- a/test_issue_fix.py
++++ b/test_issue_fix.py
+@@ -0,0 +1,54 @@
++"""Test to verify the exact issue described is fixed."""
++import pytest
++from datetime import datetime, timezone
++
++
++async def test_issue_03_exact_scenario(client, auth_headers, tokens):
++    """
++    Test the exact scenario from issue-03:
++    When an event is created with a start time that includes a non-zero timezone offset,
++    the API returns a start time that does not reflect the original offset, causing a two-hour shift.
++    """
++    # Create event with +02:00 offset (10:00 AM in timezone with +2 hours from UTC)
++    # This should represent 8:00 AM UTC
++    r = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "Morning Standup",
++            "starts_at": "2023-09-01T10:00:00+02:00",
++            "capacity": 5,
++            "price": "10.00",
++        },
++    )
++    assert r.status_code == 201
++    
++    # The returned timestamp should represent the same instant in time
++    # It should be 08:00:00Z (UTC), not 10:00:00+00:00 (which would be a 2-hour shift)
++    returned_timestamp = r.json()["starts_at"]
++    
++    # Verify it's the correct UTC time
++    assert returned_timestamp == "2023-09-01T08:00:00+00:00"
++    
++    # Also verify by parsing
++    original = datetime.fromisoformat("2023-09-01T10:00:00+02:00")
++    returned = datetime.fromisoformat(returned_timestamp)
++    
++    # Both should represent the same instant in time (8:00 UTC)
++    assert original.astimezone(timezone.utc) == returned.astimezone(timezone.utc)
++    assert original.astimezone(timezone.utc) == datetime(2023, 9, 1, 8, 0, tzinfo=timezone.utc)
++    
++    # Verify no two-hour discrepancy
++    event_id = r.json()["id"]
++    got = await client.get(f"/events/{event_id}")
++    assert got.status_code == 200
++    retrieved_timestamp = got.json()["starts_at"]
++    
++    # Should still be 08:00:00Z, not 10:00:00+00:00
++    assert retrieved_timestamp == "2023-09-01T08:00:00+00:00"
++    
++    print("✓ Issue-03 fixed: No two-hour shift when using non-zero timezone offset")
++
++
++if __name__ == "__main__":
++    pytest.main([__file__, "-v", "-s"])
+--- a/test_timezone_issue.py
++++ b/test_timezone_issue.py
+@@ -0,0 +1,50 @@
++"""Test to reproduce the timezone offset issue."""
++import pytest
++from datetime import datetime, timezone
++
++
++async def test_nonzero_offset_roundtrips(client, auth_headers, tokens):
++    """Test that a timestamp with a non-zero offset is correctly stored and retrieved."""
++    # Create event with +02:00 offset (10:00 AM in timezone with +2 hours from UTC)
++    r = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "Morning Standup",
++            "starts_at": "2023-09-01T10:00:00+02:00",
++            "capacity": 5,
++            "price": "10.00",
++        },
++    )
++    assert r.status_code == 201
++    
++    # The returned timestamp should represent the same instant in time
++    # Either as UTC (08:00:00Z) or with the original offset (10:00:00+02:00)
++    returned_timestamp = r.json()["starts_at"]
++    print(f"Returned timestamp: {returned_timestamp}")
++    
++    # Parse both timestamps and compare
++    original = datetime.fromisoformat("2023-09-01T10:00:00+02:00")
++    returned = datetime.fromisoformat(returned_timestamp)
++    
++    print(f"Original timestamp: {original}")
++    print(f"Returned timestamp: {returned}")
++    
++    # Both should represent the same instant in time
++    # When converted to UTC, they should be equal
++    assert original.astimezone(timezone.utc) == returned.astimezone(timezone.utc)
++    
++    event_id = r.json()["id"]
++    
++    # Also check the GET endpoint
++    got = await client.get(f"/events/{event_id}")
++    assert got.status_code == 200
++    retrieved_timestamp = got.json()["starts_at"]
++    print(f"Retrieved timestamp: {retrieved_timestamp}")
++    
++    retrieved = datetime.fromisoformat(retrieved_timestamp)
++    assert original.astimezone(timezone.utc) == retrieved.astimezone(timezone.utc)
++
++
++if __name__ == "__main__":
++    pytest.main([__file__, "-v", "-s"])

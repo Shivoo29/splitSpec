@@ -1,0 +1,173 @@
+{
+  "case_id": "issue-04",
+  "mode": "splitspec",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "verifier",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-3.1-flash-lite",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-04",
+    "summary": "Monetary amounts in currencies without sub‑units (e.g., JPY) are being returned with two decimal places, causing mismatches with client‑side totals.",
+    "invariants": [
+      "When the currency associated with a monetary amount has zero decimal sub‑units (e.g., JPY), the server’s serialized representation of that amount must contain no fractional part.",
+      "For such currencies the numeric value returned by the server must be an integer that corresponds to the input amount rounded to a whole number."
+    ],
+    "inputs": [
+      "A request that creates or retrieves a ticket priced in JPY with an exact whole‑number amount (e.g., 1200).",
+      "A request that creates or retrieves a ticket priced in JPY with a fractional amount (e.g., 1200.5).",
+      "Any API call that returns a price field together with a currency code of JPY."
+    ],
+    "expected_outputs": [
+      "The JSON response includes the price field as an integer value (e.g., 1200) with no trailing \".00\".",
+      "When the input amount contains a fraction, the price field is an integer reflecting the amount rounded to a whole number (e.g., 1201 if rounding up).",
+      "Client‑side calculations that sum these server‑provided prices produce totals that exactly match the server‑calculated totals."
+    ],
+    "out_of_scope": [
+      "Rounding or formatting behavior for currencies that have decimal sub‑units (e.g., USD, EUR).",
+      "Presentation layer formatting such as UI display of currency symbols.",
+      "Database storage details of monetary values."
+    ],
+    "ambiguities": [
+      "The exact rounding rule for fractional yen inputs (nearest, round‑half‑up, floor, ceiling) is not specified.",
+      "Whether the price field is returned as a numeric type or as a string containing the integer value is not clarified.",
+      "Whether the rounding should be applied at input validation time, storage time, or serialization time is not defined."
+    ],
+    "confidence": "medium"
+  },
+  "patch": {
+    "case_id": "issue-04",
+    "diff": "--- a/app/money.py\n+++ b/app/money.py\n@@ -8,7 +8,7 @@\n \n from decimal import ROUND_HALF_UP, Decimal\n \n-SUPPORTED = {\"USD\": 2, \"EUR\": 2, \"GBP\": 2, \"CHF\": 2, \"CAD\": 2, \"JPY\": 2}\n+SUPPORTED = {\"USD\": 2, \"EUR\": 2, \"GBP\": 2, \"CHF\": 2, \"CAD\": 2, \"JPY\": 0}\n \n \n def assert_amount(value: object) -> Decimal:\n@@ -37,4 +37,9 @@\n     amount = assert_amount(amount)\n     if currency is not None:\n         amount = quantize(amount, currency)\n+    \n+    # For currencies with 0 decimal places (like JPY), return as integer string\n+    if currency is not None and cash_places(currency) == 0:\n+        return str(int(amount))\n+    \n     return str(amount)\n--- a/test_issue_04_resolved.py\n+++ b/test_issue_04_resolved.py\n@@ -0,0 +1,38 @@\n+\"\"\"Test to demonstrate that issue-04 is resolved.\"\"\"\n+from decimal import Decimal\n+from app import money\n+\n+\n+def test_jpy_no_decimal_places():\n+    \"\"\"JPY amounts should have no decimal places.\"\"\"\n+    # Test with whole number\n+    assert money.render(Decimal(\"1200\"), \"JPY\") == \"1200\"\n+    \n+    # Test with fractional amount (should round)\n+    assert money.render(Decimal(\"1200.5\"), \"JPY\") == \"1201\"\n+    \n+    # Verify no \".00\" suffix\n+    result = money.render(Decimal(\"1200\"), \"JPY\")\n+    assert \".\" not in result\n+    assert result == \"1200\"\n+\n+\n+def test_jpy_rounding():\n+    \"\"\"JPY fractional amounts should round to whole numbers.\"\"\"\n+    # Round half up\n+    assert money.quantize(Decimal(\"1200.5\"), \"JPY\") == Decimal(\"1201\")\n+    assert money.quantize(Decimal(\"1200.4\"), \"JPY\") == Decimal(\"1200\")\n+    assert money.quantize(Decimal(\"1200.6\"), \"JPY\") == Decimal(\"1201\")\n+\n+\n+def test_usd_unchanged():\n+    \"\"\"USD should still work with 2 decimal places.\"\"\"\n+    assert money.render(Decimal(\"25\"), \"USD\") == \"25.00\"\n+    assert money.quantize(Decimal(\"1.005\"), \"USD\") == Decimal(\"1.01\")\n+\n+\n+if __name__ == \"__main__\":\n+    test_jpy_no_decimal_places()\n+    test_jpy_rounding()\n+    test_usd_unchanged()\n+    print(\"✓ Issue-04 resolved: JPY amounts are now correctly formatted without decimal places\")\n--- a/test_jpy_api_integration.py\n+++ b/test_jpy_api_integration.py\n@@ -0,0 +1,78 @@\n+\"\"\"Integration test for JPY handling in API responses.\"\"\"\n+from datetime import datetime\n+from decimal import Decimal\n+from app import money\n+from app.models import Event, Payment\n+from app.routes.events import event_payload\n+from app.routes.payments import payment_payload\n+\n+\n+def test_event_payload_jpy():\n+    \"\"\"Test that event payloads correctly format JPY amounts.\"\"\"\n+    # Create a mock event with JPY currency\n+    event = Event(\n+        id=1,\n+        title=\"Test Event\",\n+        description=\"Test\",\n+        starts_at=datetime(2026, 3, 10, 14, 0, 0),\n+        capacity=10,\n+        price=Decimal(\"1200\"),\n+        currency=\"JPY\",\n+        created_by=1,\n+        created_at=datetime(2025, 11, 1, 9, 0, 0),\n+    )\n+    \n+    # Get the payload\n+    payload = event_payload(event)\n+    \n+    # Verify JPY price is rendered as integer string\n+    assert payload[\"price\"] == \"1200\"\n+    assert payload[\"currency\"] == \"JPY\"\n+\n+\n+def test_event_payload_jpy_with_fraction():\n+    \"\"\"Test that fractional JPY amounts are rounded and formatted correctly.\"\"\"\n+    event = Event(\n+        id=2,\n+        title=\"Test Event 2\",\n+        description=\"Test 2\",\n+        starts_at=datetime(2026, 3, 10, 14, 0, 0),\n+        capacity=10,\n+        price=Decimal(\"1200.5\"),\n+        currency=\"JPY\",\n+        created_by=1,\n+        created_at=datetime(2025, 11, 1, 9, 0, 0),\n+    )\n+    \n+    payload = event_payload(event)\n+    \n+    # Verify fractional JPY is rounded to 1201 and rendered as integer\n+    assert payload[\"price\"] == \"1201\"\n+    assert payload[\"currency\"] == \"JPY\"\n+\n+\n+def test_payment_payload_jpy():\n+    \"\"\"Test that payment payloads correctly format JPY amounts.\"\"\"\n+    payment = Payment(\n+        id=1,\n+        user_id=1,\n+        event_id=1,\n+        amount=Decimal(\"1500\"),\n+        currency=\"JPY\",\n+        idempotency_key=\"test-001\",\n+        status=\"succeeded\",\n+        created_at=datetime(2025, 12, 1, 8, 5, 0),\n+    )\n+    \n+    payload = payment_payload(payment)\n+    \n+    # Verify JPY amount is rendered as integer string\n+    assert payload[\"amount\"] == \"1500\"\n+    assert payload[\"currency\"] == \"JPY\"\n+\n+\n+if __name__ == \"__main__\":\n+    test_event_payload_jpy()\n+    test_event_payload_jpy_with_fraction()\n+    test_payment_payload_jpy()\n+    print(\"All API integration tests passed!\")\n--- a/test_jpy_comprehensive.py\n+++ b/test_jpy_comprehensive.py\n@@ -0,0 +1,50 @@\n+\"\"\"Comprehensive tests for JPY handling.\"\"\"\n+from decimal import Decimal\n+from app import money\n+\n+\n+def test_jpy_cash_places():\n+    \"\"\"JPY should have 0 decimal places.\"\"\"\n+    assert money.cash_places(\"JPY\") == 0\n+\n+\n+def test_jpy_quantize_whole_number():\n+    \"\"\"Whole JPY amounts should remain unchanged.\"\"\"\n+    assert money.quantize(Decimal(\"1200\"), \"JPY\") == Decimal(\"1200\")\n+\n+\n+def test_jpy_quantize_rounding():\n+    \"\"\"Fractional JPY amounts should round to whole numbers.\"\"\"\n+    # Round half up: 0.5 rounds up\n+    assert money.quantize(Decimal(\"1200.5\"), \"JPY\") == Decimal(\"1201\")\n+    assert money.quantize(Decimal(\"1200.4\"), \"JPY\") == Decimal(\"1200\")\n+    assert money.quantize(Decimal(\"1200.6\"), \"JPY\") == Decimal(\"1201\")\n+\n+\n+def test_jpy_render_whole_number():\n+    \"\"\"Whole JPY amounts should render as integers without decimal places.\"\"\"\n+    assert money.render(Decimal(\"1200\"), \"JPY\") == \"1200\"\n+\n+\n+def test_jpy_render_rounded():\n+    \"\"\"Fractional JPY amounts should render as rounded integers.\"\"\"\n+    assert money.render(Decimal(\"1200.5\"), \"JPY\") == \"1201\"\n+    assert money.render(Decimal(\"1200.4\"), \"JPY\") == \"1200\"\n+\n+\n+def test_usd_unchanged():\n+    \"\"\"USD should still work with 2 decimal places.\"\"\"\n+    assert money.cash_places(\"USD\") == 2\n+    assert money.quantize(Decimal(\"1.005\"), \"USD\") == Decimal(\"1.01\")\n+    assert money.render(Decimal(\"25\"), \"USD\") == \"25.00\"\n+\n+\n+if __name__ == \"__main__\":\n+    # Run tests manually\n+    test_jpy_cash_places()\n+    test_jpy_quantize_whole_number()\n+    test_jpy_quantize_rounding()\n+    test_jpy_render_whole_number()\n+    test_jpy_render_rounded()\n+    test_usd_unchanged()\n+    print(\"All JPY tests passed!\")\n--- a/test_jpy_issue.py\n+++ b/test_jpy_issue.py\n@@ -0,0 +1,20 @@\n+\"\"\"Test to verify JPY handling issue.\"\"\"\n+from decimal import Decimal\n+from app import money\n+\n+# Test current behavior - this should fail initially\n+print(\"Testing JPY with 0 decimal places...\")\n+print(f\"JPY cash places: {money.cash_places('JPY')}\")\n+\n+# Test quantizing JPY amounts\n+print(f\"\\nQuantizing 1200.5 JPY: {money.quantize(Decimal('1200.5'), 'JPY')}\")\n+print(f\"Quantizing 1200 JPY: {money.quantize(Decimal('1200'), 'JPY')}\")\n+\n+# Test rendering JPY amounts\n+print(f\"\\nRendering 1200 JPY: {money.render(Decimal('1200'), 'JPY')}\")\n+print(f\"Rendering 1200.5 JPY: {money.render(Decimal('1200.5'), 'JPY')}\")\n+\n+# Expected behavior:\n+# - JPY should have 0 decimal places\n+# - 1200.5 JPY should round to 1201 JPY (round-half-up)\n+# - Rendered output should be \"1200\" and \"1201\", not \"1200.00\" or \"1201.00\"\n",
+    "files_changed": [
+      "app/money.py",
+      "test_issue_04_resolved.py",
+      "test_jpy_api_integration.py",
+      "test_jpy_comprehensive.py",
+      "test_jpy_issue.py"
+    ],
+    "lines_added": 192,
+    "lines_removed": 1,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; Successfully resolved issue-04 by updating app/money.py to correctly handle JPY currency with 0 decimal places. Changes made: 1. Updated SUPPORTED dictionary: Changed \"JPY\": 2 to \"JPY\": 0 2. Enhanced render() function: Added special handling for currencies with 0 decimal places to return integer strings The fix ensures: - JPY amounts are serialized as integers without decimal places (e.g., \"1200\" instead of \"1200.00\") - Fractional JPY amounts are rounded to whole numbers using round-half-up (e.g., 1200.5 → 1201) - Client-side calculations will match server totals exactly - All existing USD and... [truncated, 764 chars; full reply in trajectory.jsonl]"
+  },
+  "verifier_test": {
+    "case_id": "issue-04",
+    "filename": "test_issue_04_jpy.py",
+    "contents": "from decimal import Decimal\nimport pytest\nfrom app import money\n\ndef test_jpy_should_not_have_decimals():\n    # The current implementation of money.py defines JPY as having 2 decimal places.\n    # We want it to be 0 for JPY.\n    \n    amount = Decimal(\"1200\")\n    # Current behavior will likely return \"1200.00\"\n    rendered = money.render(amount, \"JPY\")\n    \n    # Invariant: JPY must be rendered without decimal places.\n    assert \".\" not in rendered\n    assert rendered == \"1200\"\n\ndef test_jpy_fractional_input_rounds_to_integer():\n    amount = Decimal(\"1200.5\")\n    # Current behavior will likely return \"1200.50\"\n    rendered = money.render(amount, \"JPY\")\n    \n    # Invariant: JPY must be rendered as an integer.\n    # The requirement says \"rounded to a whole number\".\n    assert \".\" not in rendered\n    assert rendered == \"1201\" # Assuming round-half-up",
+    "run_command": "pytest test_issue_04_jpy.py",
+    "invariant": "When the currency is JPY, the serialized monetary amount must be an integer without fractional components, rounded to the nearest whole number.",
+    "assumptions": [
+      "The system uses 'money.render' to serialize monetary amounts to strings.",
+      "JPY should have zero decimal places instead of the current two.",
+      "The expected rounding for JPY is round-half-up (1200.5 -> 1201)."
+    ],
+    "confidence": "high",
+    "frozen_sha256": "2e245104876603fb8d39ca2be61820e94b55fc215eeed2beacaf1027fa41d38b"
+  },
+  "validity": {
+    "compiles": true,
+    "runs": true,
+    "fails_on_original_bug": true,
+    "passed": true,
+    "reason": "test failed on the buggy code (2 failures) as expected"
+  },
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_money.py",
+    "passed": true,
+    "total": 4,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.112,
+    "stdout_tail": "....                                                                     [100%]\n4 passed in 0.05s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-04-br7gck5w/issue-04-judge/.junit/visible.xml"
+  },
+  "verifier": {
+    "label": "verifier",
+    "command": "pytest -q --junitxml=/workspace/.junit/verifier.xml test_issue_04_jpy.py",
+    "passed": true,
+    "total": 2,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.065,
+    "stdout_tail": "..                                                                       [100%]\n2 passed in 0.01s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-04-br7gck5w/issue-04-judge/.junit/verifier.xml"
+  },
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 5,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.13,
+    "stdout_tail": ".....                                                                    [100%]\n5 passed in 0.06s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-04-br7gck5w/issue-04-judge/.junit/gold.xml"
+  },
+  "mutation": [
+    {
+      "mutant_id": "m04-1",
+      "description": "original bug: every currency, including JPY, rounds to two decimal places",
+      "killed": true,
+      "detail": "test failed on this mutant (2 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m04-2",
+      "description": "responses look right but events and payments are stored unquantized (wrong state)",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m04-3",
+      "description": "cosmetic fix: JPY zero cents vanish from the rendered string but stored amounts still have them",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m04-4",
+      "description": "silently weakens the visible tests while two-decimal JPY rounding remains",
+      "killed": true,
+      "detail": "test failed on this mutant (2 failed, 0 errors)",
+      "scored": true
+    }
+  ],
+  "decision": "ACCEPT",
+  "runtime_sec": 575.231,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-04-splitspec"
+}

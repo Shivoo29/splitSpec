@@ -1,0 +1,398 @@
+--- a/app/money.py
++++ b/app/money.py
+@@ -8,7 +8,7 @@
+ 
+ from decimal import ROUND_HALF_UP, Decimal
+ 
+-SUPPORTED = {"USD": 2, "EUR": 2, "GBP": 2, "CHF": 2, "CAD": 2, "JPY": 2}
++SUPPORTED = {"USD": 2, "EUR": 2, "GBP": 2, "CHF": 2, "CAD": 2, "JPY": 0}
+ 
+ 
+ def assert_amount(value: object) -> Decimal:
+--- a/test_currency_support.py
++++ b/test_currency_support.py
+@@ -0,0 +1,38 @@
++"""Test that all supported currencies work correctly."""
++from decimal import Decimal
++from app import money
++
++
++def test_all_currencies_have_places():
++    """Test that all supported currencies have defined decimal places."""
++    currencies = money.SUPPORTED
++    print(f"Supported currencies: {currencies}")
++    
++    # Verify JPY has 0 decimal places
++    assert currencies["JPY"] == 0, "JPY should have 0 decimal places"
++    
++    # Verify other currencies have 2 decimal places
++    for code, places in currencies.items():
++        if code == "JPY":
++            continue
++        assert places == 2, f"{code} should have 2 decimal places"
++
++
++def test_jpy_is_only_zero_subunit():
++    """Test that JPY is the only currency with zero sub-units."""
++    currencies = money.SUPPORTED
++    zero_subunit_currencies = [code for code, places in currencies.items() if places == 0]
++    assert zero_subunit_currencies == ["JPY"], f"Only JPY should have 0 sub-units, got {zero_subunit_currencies}"
++
++
++def test_cash_places_function():
++    """Test the cash_places function returns correct values."""
++    assert money.cash_places("JPY") == 0
++    assert money.cash_places("USD") == 2
++    assert money.cash_places("EUR") == 2
++    assert money.cash_places("GBP") == 2
++
++
++if __name__ == "__main__":
++    import pytest
++    pytest.main([__file__, "-v"])
+--- a/test_issue_04_fix.py
++++ b/test_issue_04_fix.py
+@@ -0,0 +1,100 @@
++"""Test that issue-04 (Money rounding for JPY) is fixed."""
++from decimal import Decimal
++import pytest
++from app import money
++
++
++def test_jpy_has_zero_decimal_places():
++    """JPY should be configured with 0 decimal places."""
++    assert money.SUPPORTED["JPY"] == 0
++
++
++def test_jpy_quantize_rounds_to_integer():
++    """JPY amounts should be quantized to integers."""
++    # Test round-half-up behavior
++    assert money.quantize(Decimal("1200.0"), "JPY") == Decimal("1200")
++    assert money.quantize(Decimal("1200.49"), "JPY") == Decimal("1200")
++    assert money.quantize(Decimal("1200.50"), "JPY") == Decimal("1201")
++    assert money.quantize(Decimal("1200.75"), "JPY") == Decimal("1201")
++    assert money.quantize(Decimal("1200.99"), "JPY") == Decimal("1201")
++
++
++def test_jpy_render_no_decimal_point():
++    """JPY amounts should render without decimal points."""
++    assert money.render(Decimal("1200"), "JPY") == "1200"
++    assert money.render(Decimal("1200.0"), "JPY") == "1200"
++    assert money.render(Decimal("1200.5"), "JPY") == "1201"
++    assert money.render(Decimal("1200.75"), "JPY") == "1201"
++
++
++def test_usd_still_has_two_decimal_places():
++    """USD should still have 2 decimal places (unchanged)."""
++    assert money.SUPPORTED["USD"] == 2
++    assert money.quantize(Decimal("1200.75"), "USD") == Decimal("1200.75")
++    assert money.render(Decimal("1200.75"), "USD") == "1200.75"
++
++
++@pytest.mark.asyncio
++async def test_jpy_event_creation_and_retrieval(client, auth_headers, tokens):
++    """Test that JPY events are created and retrieved with integer prices."""
++    # Create event with fractional JPY price
++    response = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "Test JPY Event",
++            "starts_at": "2026-07-01T10:00:00Z",
++            "capacity": 10,
++            "price": "1500.75",
++            "currency": "JPY",
++        },
++    )
++    assert response.status_code == 201
++    data = response.json()
++    assert data["currency"] == "JPY"
++    assert data["price"] == "1501"  # Rounded to integer
++
++    # Retrieve the event and verify it still has integer price
++    event_id = data["id"]
++    response = await client.get(f"/events/{event_id}")
++    assert response.status_code == 200
++    data = response.json()
++    assert data["currency"] == "JPY"
++    assert data["price"] == "1501"  # Still integer
++
++
++@pytest.mark.asyncio
++async def test_jpy_payment(client, auth_headers, tokens):
++    """Test that JPY payments are created with integer amounts."""
++    # Create a JPY event first
++    response = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "JPY Payment Test",
++            "starts_at": "2026-07-01T10:00:00Z",
++            "capacity": 10,
++            "price": "2000.50",
++            "currency": "JPY",
++        },
++    )
++    assert response.status_code == 201
++    event_data = response.json()
++    event_id = event_data["id"]
++
++    # Charge for the event
++    headers = {
++        **auth_headers(tokens["dana"]),
++        "Idempotency-Key": "test-jpy-payment-fix",
++    }
++    response = await client.post(
++        "/payments", headers=headers, json={"event_id": event_id}
++    )
++    assert response.status_code == 201
++    payment_data = response.json()
++    assert payment_data["currency"] == "JPY"
++    assert payment_data["amount"] == "2001"  # Rounded to integer
++
++
++if __name__ == "__main__":
++    pytest.main([__file__, "-v", "-s"])
+--- a/test_jpy_api.py
++++ b/test_jpy_api.py
+@@ -0,0 +1,48 @@
++"""Test JPY handling in API endpoints."""
++from decimal import Decimal
++import pytest
++from fastapi.testclient import TestClient
++from app.main import app
++from app.models import Base
++from app.db import engine_from_url, default_db_url
++from seed import seed
++from sqlalchemy.orm import sessionmaker
++
++
++@pytest.fixture(scope="module")
++def client():
++    """Create test client with seeded database."""
++    from sqlalchemy import create_engine
++    from app.db import get_session
++    
++    engine = engine_from_url(default_db_url())
++    Base.metadata.create_all(engine)
++    
++    # Seed the database
++    sm = sessionmaker(bind=engine, expire_on_commit=False)
++    with sm() as session:
++        seed(session)
++    
++    # Create test client
++    client = TestClient(app)
++    return client
++
++
++def test_get_jpy_event(client):
++    """Test that JPY event is returned with integer price."""
++    response = client.get("/events/2")
++    assert response.status_code == 200
++    data = response.json()
++    print(f"JPY event data: {data}")
++    assert data["currency"] == "JPY"
++    assert data["price"] == "1200"  # Should be integer without decimals
++
++
++def test_create_jpy_event(client):
++    """Test creating a JPY event with fractional price rounds to integer."""
++    # This would need authentication, so let's skip for now
++    pass
++
++
++if __name__ == "__main__":
++    pytest.main([__file__, "-v"])
+--- a/test_jpy_edge_cases.py
++++ b/test_jpy_edge_cases.py
+@@ -0,0 +1,47 @@
++"""Test edge cases for JPY rounding."""
++from decimal import Decimal
++from app import money
++
++
++def test_jpy_rounding_half_up():
++    """Test that JPY uses round-half-up correctly."""
++    # 1200.5 should round up to 1201
++    assert money.quantize(Decimal("1200.5"), "JPY") == Decimal("1201")
++    # 1200.499 should round down to 1200
++    assert money.quantize(Decimal("1200.499"), "JPY") == Decimal("1200")
++    # 1200.501 should round up to 1201
++    assert money.quantize(Decimal("1200.501"), "JPY") == Decimal("1201")
++
++
++def test_jpy_rounding_negative():
++    """Test that negative JPY amounts round correctly."""
++    # -1200.5 should round to -1201 (away from zero)
++    assert money.quantize(Decimal("-1200.5"), "JPY") == Decimal("-1201")
++    # -1200.499 should round to -1200
++    assert money.quantize(Decimal("-1200.499"), "JPY") == Decimal("-1200")
++
++
++def test_jpy_zero():
++    """Test that zero JPY works correctly."""
++    assert money.quantize(Decimal("0"), "JPY") == Decimal("0")
++    assert money.quantize(Decimal("0.0"), "JPY") == Decimal("0")
++    assert money.quantize(Decimal("0.49"), "JPY") == Decimal("0")
++    assert money.quantize(Decimal("0.5"), "JPY") == Decimal("1")
++
++
++def test_jpy_large_numbers():
++    """Test that large JPY amounts work correctly."""
++    assert money.quantize(Decimal("999999999999.99"), "JPY") == Decimal("1000000000000")
++
++
++def test_jpy_rendering_various():
++    """Test rendering of various JPY amounts."""
++    assert money.render(Decimal("0"), "JPY") == "0"
++    assert money.render(Decimal("1"), "JPY") == "1"
++    assert money.render(Decimal("1000"), "JPY") == "1000"
++    assert money.render(Decimal("1200.5"), "JPY") == "1201"
++
++
++if __name__ == "__main__":
++    import pytest
++    pytest.main([__file__, "-v"])
+--- a/test_jpy_integration.py
++++ b/test_jpy_integration.py
+@@ -0,0 +1,79 @@
++"""Integration tests for JPY currency handling."""
++from decimal import Decimal
++import pytest
++
++
++@pytest.mark.asyncio
++async def test_get_jpy_event(client):
++    """Test that JPY event is returned with integer price (no decimals)."""
++    response = await client.get("/events/2")
++    assert response.status_code == 200
++    data = response.json()
++    print(f"JPY event data: {data}")
++    assert data["currency"] == "JPY"
++    assert data["price"] == "1200"  # Should be integer without decimals
++
++
++@pytest.mark.asyncio
++async def test_create_jpy_event_with_fractional_price(client, auth_headers, tokens):
++    """Test creating a JPY event with fractional price rounds to integer."""
++    response = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "Tokyo Conference",
++            "starts_at": "2026-07-01T10:00:00Z",
++            "capacity": 50,
++            "price": "1500.75",  # Fractional JPY
++            "currency": "JPY",
++        },
++    )
++    assert response.status_code == 201
++    data = response.json()
++    print(f"Created JPY event: {data}")
++    assert data["currency"] == "JPY"
++    # Should round to 1501 using round-half-up
++    assert data["price"] == "1501"
++
++
++@pytest.mark.asyncio
++async def test_create_jpy_event_with_whole_price(client, auth_headers, tokens):
++    """Test creating a JPY event with whole price stays as integer."""
++    response = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "Osaka Meetup",
++            "starts_at": "2026-08-01T10:00:00Z",
++            "capacity": 30,
++            "price": "2000",  # Whole JPY
++            "currency": "JPY",
++        },
++    )
++    assert response.status_code == 201
++    data = response.json()
++    print(f"Created JPY event: {data}")
++    assert data["currency"] == "JPY"
++    assert data["price"] == "2000"
++
++
++@pytest.mark.asyncio
++async def test_charge_jpy_payment(client, auth_headers, tokens):
++    """Test charging a JPY payment."""
++    # First, let's use the seeded JPY event (id=2)
++    headers = {
++        **auth_headers(tokens["dana"]),
++        "Idempotency-Key": "test-jpy-payment-001",
++    }
++    response = await client.post(
++        "/payments", headers=headers, json={"event_id": 2}
++    )
++    assert response.status_code == 201
++    data = response.json()
++    print(f"JPY payment: {data}")
++    assert data["currency"] == "JPY"
++    assert data["amount"] == "1200"  # Should be integer without decimals
++
++
++if __name__ == "__main__":
++    pytest.main([__file__, "-v", "-s"])
+--- a/test_jpy_rounding.py
++++ b/test_jpy_rounding.py
+@@ -0,0 +1,32 @@
++"""Test JPY rounding behavior."""
++from decimal import Decimal
++from app import money
++
++
++def test_jpy_rounding_to_integer():
++    """JPY should round to whole numbers (0 decimal places)."""
++    # Test that fractional JPY amounts are rounded to integers
++    result = money.quantize(Decimal("1200.75"), "JPY")
++    print(f"1200.75 JPY quantized: {result}")
++    assert result == Decimal("1201"), f"Expected 1201, got {result}"
++
++
++def test_jpy_rendering_no_decimals():
++    """JPY should render without decimal places."""
++    result = money.render(Decimal("1200"), "JPY")
++    print(f"1200 JPY rendered: {result}")
++    assert result == "1200", f"Expected '1200', got {result}"
++
++
++def test_jpy_rendering_with_fractional_input():
++    """JPY should render fractional inputs as whole numbers."""
++    result = money.render(Decimal("1200.75"), "JPY")
++    print(f"1200.75 JPY rendered: {result}")
++    assert result == "1201", f"Expected '1201', got {result}"
++
++
++if __name__ == "__main__":
++    test_jpy_rounding_to_integer()
++    test_jpy_rendering_no_decimals()
++    test_jpy_rendering_with_fractional_input()
++    print("All tests passed!")
+--- a/test_seed_jpy.py
++++ b/test_seed_jpy.py
+@@ -0,0 +1,22 @@
++"""Test that seed data works with JPY."""
++from app import money
++
++
++def test_seed_jpy_price():
++    """Test that the seed JPY price of 1200 works correctly."""
++    result = money.quantize("1200", "JPY")
++    print(f"Seed JPY price 1200 quantized: {result}")
++    assert result == 1200
++
++
++def test_seed_jpy_render():
++    """Test that the seed JPY price renders correctly."""
++    result = money.render("1200", "JPY")
++    print(f"Seed JPY price 1200 rendered: {result}")
++    assert result == "1200"
++
++
++if __name__ == "__main__":
++    test_seed_jpy_price()
++    test_seed_jpy_render()
++    print("Seed JPY tests passed!")

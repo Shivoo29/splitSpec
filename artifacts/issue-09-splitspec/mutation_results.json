@@ -1,0 +1,36 @@
+{
+  "score": 0.0,
+  "killed": 0,
+  "denominator": 4,
+  "excluded_unkillable": [],
+  "results": [
+    {
+      "mutant_id": "m01-original-bug",
+      "description": "the seeded defect unchanged, no invalidation on event creation",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m02-obvious-path-only",
+      "description": "invalidates only the single-event cache key, leaving every list page stale",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m03-right-value-wrong-state",
+      "description": "returns a fresh payload from the write path but never clears the cache",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m04-weakens-the-test",
+      "description": "disables the cache read entirely instead of invalidating on write",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "case_id": "issue-02",
+  "filename": "test_issue_02_repro.py",
+  "run_command": "pytest test_issue_02_repro.py",
+  "invariant": "For a deterministic ordered list, concatenation of paginated sub-lists (using sequential offsets) must reconstruct the full original list exactly, without gaps or overlaps.",
+  "assumptions": [
+    "The /events endpoint supports pagination via 'limit' and 'offset' query parameters.",
+    "The server-side ordering is deterministic (the test assumes the order [3, 1, 2] based on the existing test suite).",
+    "The test environment has at least 3 events pre-populated, as per existing test data."
+  ],
+  "confidence": "high",
+  "frozen_sha256": "8091ceb055d818284139a874bba5ec5be400fe126bbee3efab2596e50b004ebb"
+}

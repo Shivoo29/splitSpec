@@ -1,0 +1,13 @@
+{
+  "case_id": "issue-07",
+  "filename": "test_race_condition.py",
+  "run_command": "pytest test_race_condition.py",
+  "invariant": "For any given (user_id, event_id), there must exist at most one 'confirmed' Registration row. Concurrent registration requests must be handled such that only one succeeds.",
+  "assumptions": [
+    "The application's registration logic uses a check-then-insert pattern that is susceptible to race conditions.",
+    "The test infrastructure allows concurrent requests to the API.",
+    "The test environment can reliably demonstrate the failure (e.g., by firing two requests)."
+  ],
+  "confidence": "high",
+  "frozen_sha256": "1f0535bebddcab63507595edd876b6d5a4902c927439bb39a25f65d11e5223d2"
+}

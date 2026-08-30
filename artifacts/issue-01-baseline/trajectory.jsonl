@@ -1,0 +1,23 @@
+{"ts": 1788111895.6756928, "actor": "contract", "kind": "call", "case_id": "issue-01", "model": "openai/gpt-oss-120b"}
+{"ts": 1788111895.6758244, "actor": "contract", "kind": "tokens", "input_tokens": 938, "output_tokens": 661, "model": "openai/gpt-oss-120b"}
+{"ts": 1788111895.6758623, "actor": "contract", "kind": "parsed", "case_id": "issue-01", "confidence": "medium", "n_invariants": 2, "n_ambiguities": 4}
+{"ts": 1788111896.910054, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 971, "output_tokens": 34, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788111896.9108458, "actor": "fixer", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788111898.3839102, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1344, "output_tokens": 39, "finish_reason": "tool_calls", "tool_calls": 2}
+{"ts": 1788111898.3841062, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/routes/events.py", "chars": 3885, "truncated": false}
+{"ts": 1788111898.384194, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/models.py", "chars": 5001, "truncated": false}
+{"ts": 1788111901.028507, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 3625, "output_tokens": 33, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788111901.0286906, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "visible_tests/issue-01/test_events.py", "chars": 1497, "truncated": false}
+{"ts": 1788111902.5200267, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4070, "output_tokens": 44, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788111902.5203931, "actor": "fixer", "kind": "tool_call", "tool": "search", "pattern": "empty.*title|title.*empty|negative.*price|price.*negative", "matches": 0}
+{"ts": 1788111903.8773186, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4119, "output_tokens": 27, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788111903.8775716, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "conftest.py", "chars": 1060, "truncated": false}
+{"ts": 1788111914.4653962, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4435, "output_tokens": 40, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788111915.6035638, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-01/test_events.py", "-v"], "exit_code": 0, "duration_sec": 1.138}
+{"ts": 1788111921.4266782, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4735, "output_tokens": 173, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788111921.4269056, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/money.py", "chars": 1237, "truncated": false}
+{"ts": 1788111958.0728912, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 5226, "output_tokens": 1333, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788111958.0731084, "actor": "fixer", "kind": "tool_call", "tool": "write_file", "path": "app/routes/events.py", "chars": 4325}
+{"ts": 1788119380.678684, "actor": "contract", "kind": "call", "case_id": "issue-01", "model": "openai/gpt-oss-120b"}
+{"ts": 1788119380.6787763, "actor": "contract", "kind": "tokens", "input_tokens": 938, "output_tokens": 882, "model": "openai/gpt-oss-120b"}
+{"ts": 1788119380.6788168, "actor": "contract", "kind": "parsed", "case_id": "issue-01", "confidence": "medium", "n_invariants": 2, "n_ambiguities": 4}

@@ -1,0 +1,112 @@
+--- a/app/routes/events.py
++++ b/app/routes/events.py
+@@ -6,7 +6,7 @@
+ 
+ from fastapi import APIRouter, Depends, HTTPException, Query, Request
+ from pydantic import BaseModel, Field, field_validator
+-from sqlalchemy import select
++from sqlalchemy import select, func
+ from sqlalchemy.orm import Session
+ 
+ from app import money
+@@ -102,7 +102,8 @@
+     cached = request.app.state.cache.get(key)
+     if cached is not None:
+         return cached
+-    total = len(session.scalars(select(Event).limit(limit).offset(offset)).all())
++    # Calculate total count without pagination
++    total = session.scalar(select(func.count()).select_from(Event))
+     rows = session.scalars(
+         select(Event).order_by(Event.starts_at.asc(), Event.id.asc()).limit(limit).offset(offset)
+     ).all()
+--- a/test_pagination_total.py
++++ b/test_pagination_total.py
+@@ -0,0 +1,49 @@
++"""Test to verify the pagination total issue."""
++import pytest
++from httpx import AsyncClient
++
++
++@pytest.mark.anyio
++async def test_pagination_total_count(client: AsyncClient):
++    """Test that total reflects the overall count, not just the current page."""
++    
++    # Get all events with a large limit
++    r = await client.get("/events?limit=100&offset=0")
++    assert r.status_code == 200
++    body = r.json()
++    full_count = body["total"]
++    
++    # Get events with a small limit
++    r = await client.get("/events?limit=2&offset=0")
++    assert r.status_code == 200
++    body = r.json()
++    
++    # The total should be the same regardless of limit
++    assert body["total"] == full_count, f"Expected total={full_count}, got {body['total']}"
++    
++    # The items array should respect the limit
++    assert len(body["items"]) == 2, f"Expected 2 items with limit=2, got {len(body['items'])}"
++    
++    # Verify we have more than 2 events in total
++    assert full_count > 2, f"Expected more than 2 events, got {full_count}"
++
++
++@pytest.mark.anyio
++async def test_pagination_total_with_offset(client: AsyncClient):
++    """Test that total is correct even with offset."""
++    
++    # Get all events with a large limit
++    r = await client.get("/events?limit=100&offset=0")
++    assert r.status_code == 200
++    full_count = r.json()["total"]
++    
++    # Get events with offset
++    r = await client.get("/events?limit=1&offset=1")
++    assert r.status_code == 200
++    body = r.json()
++    
++    # The total should still be the same
++    assert body["total"] == full_count, f"Expected total={full_count}, got {body['total']}"
++    
++    # The items array should have 1 item
++    assert len(body["items"]) == 1, f"Expected 1 item with limit=1, got {len(body['items'])}"
+--- a/verify_fix.py
++++ b/verify_fix.py
+@@ -0,0 +1,36 @@
++"""Simple script to verify the pagination total fix."""
++import asyncio
++from httpx import AsyncClient
++from app.main import app
++
++
++async def main():
++    async with AsyncClient(app=app, base_url="http://test") as client:
++        # Test 1: Get all events with large limit
++        r = await client.get("/events?limit=100&offset=0")
++        body = r.json()
++        full_count = body["total"]
++        print(f"Full count (limit=100): {full_count}")
++        print(f"Items returned: {len(body['items'])}")
++        
++        # Test 2: Get events with small limit
++        r = await client.get("/events?limit=2&offset=0")
++        body = r.json()
++        print(f"\nWith limit=2:")
++        print(f"Total: {body['total']}")
++        print(f"Items returned: {len(body['items'])}")
++        
++        # Test 3: Get events with offset
++        r = await client.get("/events?limit=1&offset=1")
++        body = r.json()
++        print(f"\nWith limit=1, offset=1:")
++        print(f"Total: {body['total']}")
++        print(f"Items returned: {len(body['items'])}")
++        
++        # Verify the fix
++        assert body["total"] == full_count, f"Total mismatch! Expected {full_count}, got {body['total']}"
++        print(f"\n✓ Fix verified: Total count is consistent across different pagination parameters!")
++
++
++if __name__ == "__main__":
++    asyncio.run(main())

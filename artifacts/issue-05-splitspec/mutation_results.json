@@ -1,0 +1,36 @@
+{
+  "score": 0.5,
+  "killed": 2,
+  "denominator": 4,
+  "excluded_unkillable": [],
+  "results": [
+    {
+      "mutant_id": "m05-1",
+      "description": "original bug: ticket ownership is never checked when reading a ticket",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m05-2",
+      "description": "ownership is verified only after the revoked check, leaking revocation state of foreign tickets",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m05-3",
+      "description": "checks against the event creator instead of the ticket owner",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m05-4",
+      "description": "silently weakens the visible tests while the missing ownership check remains",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ]
+}

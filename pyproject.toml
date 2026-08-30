@@ -22,6 +22,10 @@ line-length = 110
 # fixtures/eventpulse/bugs/ from being linted as if `app` were third-party.
 src = [".", "fixtures/eventpulse"]
 target-version = "py311"
+# Run artifacts are the recorded evidence behind every claim in the README, and the
+# verifier tests inside them were written by a model. Linting them would report on
+# the model's style, and `--fix` would silently rewrite the record.
+extend-exclude = ["artifacts", "apps/dashboard"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

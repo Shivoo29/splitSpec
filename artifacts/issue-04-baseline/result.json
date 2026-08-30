@@ -1,0 +1,105 @@
+{
+  "case_id": "issue-04",
+  "mode": "baseline",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-04",
+    "summary": "Amounts in currencies without fractional subunits (e.g., Japanese Yen) must be represented and returned as whole numbers, without decimal places.",
+    "invariants": [
+      "When the currency of a monetary value has zero sub‑unit digits (e.g., JPY), the server must round the value to an integer number of the major unit before storing or returning it.",
+      "The string representation of such a value returned by any API must contain no decimal point or fractional digits."
+    ],
+    "inputs": [
+      "A request that creates or updates a price expressed in a zero‑sub‑unit currency with a fractional amount (e.g., 1200.75 JPY).",
+      "A request that retrieves a price or total in a zero‑sub‑unit currency."
+    ],
+    "expected_outputs": [
+      "The stored or returned amount for the zero‑sub‑unit currency is an integer (e.g., 1200 instead of 1200.00 or 1200.75).",
+      "Client‑side calculations that sum such amounts produce the same total as the server‑side total."
+    ],
+    "out_of_scope": [
+      "Rounding behavior for currencies that have sub‑units (e.g., USD, EUR).",
+      "Presentation formatting on the client UI beyond the numeric value returned by the API.",
+      "Currency conversion logic."
+    ],
+    "ambiguities": [
+      "Exact rounding rule to apply for fractional inputs (e.g., round half‑up, floor, ceiling).",
+      "Which API endpoints or model fields are responsible for applying the rounding (creation, update, retrieval).",
+      "Whether the integer value should be returned as a number type or as a string without a decimal point."
+    ],
+    "confidence": "medium"
+  },
+  "patch": {
+    "case_id": "issue-04",
+    "diff": "--- a/app/money.py\n+++ b/app/money.py\n@@ -8,7 +8,7 @@\n \n from decimal import ROUND_HALF_UP, Decimal\n \n-SUPPORTED = {\"USD\": 2, \"EUR\": 2, \"GBP\": 2, \"CHF\": 2, \"CAD\": 2, \"JPY\": 2}\n+SUPPORTED = {\"USD\": 2, \"EUR\": 2, \"GBP\": 2, \"CHF\": 2, \"CAD\": 2, \"JPY\": 0}\n \n \n def assert_amount(value: object) -> Decimal:\n--- a/test_currency_support.py\n+++ b/test_currency_support.py\n@@ -0,0 +1,38 @@\n+\"\"\"Test that all supported currencies work correctly.\"\"\"\n+from decimal import Decimal\n+from app import money\n+\n+\n+def test_all_currencies_have_places():\n+    \"\"\"Test that all supported currencies have defined decimal places.\"\"\"\n+    currencies = money.SUPPORTED\n+    print(f\"Supported currencies: {currencies}\")\n+    \n+    # Verify JPY has 0 decimal places\n+    assert currencies[\"JPY\"] == 0, \"JPY should have 0 decimal places\"\n+    \n+    # Verify other currencies have 2 decimal places\n+    for code, places in currencies.items():\n+        if code == \"JPY\":\n+            continue\n+        assert places == 2, f\"{code} should have 2 decimal places\"\n+\n+\n+def test_jpy_is_only_zero_subunit():\n+    \"\"\"Test that JPY is the only currency with zero sub-units.\"\"\"\n+    currencies = money.SUPPORTED\n+    zero_subunit_currencies = [code for code, places in currencies.items() if places == 0]\n+    assert zero_subunit_currencies == [\"JPY\"], f\"Only JPY should have 0 sub-units, got {zero_subunit_currencies}\"\n+\n+\n+def test_cash_places_function():\n+    \"\"\"Test the cash_places function returns correct values.\"\"\"\n+    assert money.cash_places(\"JPY\") == 0\n+    assert money.cash_places(\"USD\") == 2\n+    assert money.cash_places(\"EUR\") == 2\n+    assert money.cash_places(\"GBP\") == 2\n+\n+\n+if __name__ == \"__main__\":\n+    import pytest\n+    pytest.main([__file__, \"-v\"])\n--- a/test_issue_04_fix.py\n+++ b/test_issue_04_fix.py\n@@ -0,0 +1,100 @@\n+\"\"\"Test that issue-04 (Money rounding for JPY) is fixed.\"\"\"\n+from decimal import Decimal\n+import pytest\n+from app import money\n+\n+\n+def test_jpy_has_zero_decimal_places():\n+    \"\"\"JPY should be configured with 0 decimal places.\"\"\"\n+    assert money.SUPPORTED[\"JPY\"] == 0\n+\n+\n+def test_jpy_quantize_rounds_to_integer():\n+    \"\"\"JPY amounts should be quantized to integers.\"\"\"\n+    # Test round-half-up behavior\n+    assert money.quantize(Decimal(\"1200.0\"), \"JPY\") == Decimal(\"1200\")\n+    assert money.quantize(Decimal(\"1200.49\"), \"JPY\") == Decimal(\"1200\")\n+    assert money.quantize(Decimal(\"1200.50\"), \"JPY\") == Decimal(\"1201\")\n+    assert money.quantize(Decimal(\"1200.75\"), \"JPY\") == Decimal(\"1201\")\n+    assert money.quantize(Decimal(\"1200.99\"), \"JPY\") == Decimal(\"1201\")\n+\n+\n+def test_jpy_render_no_decimal_point():\n+    \"\"\"JPY amounts should render without decimal points.\"\"\"\n+    assert money.render(Decimal(\"1200\"), \"JPY\") == \"1200\"\n+    assert money.render(Decimal(\"1200.0\"), \"JPY\") == \"1200\"\n+    assert money.render(Decimal(\"1200.5\"), \"JPY\") == \"1201\"\n+    assert money.render(Decimal(\"1200.75\"), \"JPY\") == \"1201\"\n+\n+\n+def test_usd_still_has_two_decimal_places():\n+    \"\"\"USD should still have 2 decimal places (unchanged).\"\"\"\n+    assert money.SUPPORTED[\"USD\"] == 2\n+    assert money.quantize(Decimal(\"1200.75\"), \"USD\") == Decimal(\"1200.75\")\n+    assert money.render(Decimal(\"1200.75\"), \"USD\") == \"1200.75\"\n+\n+\n+@pytest.mark.asyncio\n+async def test_jpy_event_creation_and_retrieval(client, auth_headers, tokens):\n+    \"\"\"Test that JPY events are created and retrieved with integer prices.\"\"\"\n+    # Create event with fractional JPY price\n+    response = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"Test JPY Event\",\n+            \"starts_at\": \"2026-07-01T10:00:00Z\",\n+            \"capacity\": 10,\n+            \"price\": \"1500.75\",\n+            \"currency\": \"JPY\",\n+        },\n+    )\n+    assert response.status_code == 201\n+    data = response.json()\n+    assert data[\"currency\"] == \"JPY\"\n+    assert data[\"price\"] == \"1501\"  # Rounded to integer\n+\n+    # Retrieve the event and verify it still has integer price\n+    event_id = data[\"id\"]\n+    response = await client.get(f\"/events/{event_id}\")\n+    assert response.status_code == 200\n+    data = response.json()\n+    assert data[\"currency\"] == \"JPY\"\n+    assert data[\"price\"] == \"1501\"  # Still integer\n+\n+\n+@pytest.mark.asyncio\n+async def test_jpy_payment(client, auth_headers, tokens):\n+    \"\"\"Test that JPY payments are created with integer amounts.\"\"\"\n+    # Create a JPY event first\n+    response = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"JPY Payment Test\",\n+            \"starts_at\": \"2026-07-01T10:00:00Z\",\n+            \"capacity\": 10,\n+            \"price\": \"2000.50\",\n+            \"currency\": \"JPY\",\n+        },\n+    )\n+    assert response.status_code == 201\n+    event_data = response.json()\n+    event_id = event_data[\"id\"]\n+\n+    # Charge for the event\n+    headers = {\n+        **auth_headers(tokens[\"dana\"]),\n+        \"Idempotency-Key\": \"test-jpy-payment-fix\",\n+    }\n+    response = await client.post(\n+        \"/payments\", headers=headers, json={\"event_id\": event_id}\n+    )\n+    assert response.status_code == 201\n+    payment_data = response.json()\n+    assert payment_data[\"currency\"] == \"JPY\"\n+    assert payment_data[\"amount\"] == \"2001\"  # Rounded to integer\n+\n+\n+if __name__ == \"__main__\":\n+    pytest.main([__file__, \"-v\", \"-s\"])\n--- a/test_jpy_api.py\n+++ b/test_jpy_api.py\n@@ -0,0 +1,48 @@\n+\"\"\"Test JPY handling in API endpoints.\"\"\"\n+from decimal import Decimal\n+import pytest\n+from fastapi.testclient import TestClient\n+from app.main import app\n+from app.models import Base\n+from app.db import engine_from_url, default_db_url\n+from seed import seed\n+from sqlalchemy.orm import sessionmaker\n+\n+\n+@pytest.fixture(scope=\"module\")\n+def client():\n+    \"\"\"Create test client with seeded database.\"\"\"\n+    from sqlalchemy import create_engine\n+    from app.db import get_session\n+    \n+    engine = engine_from_url(default_db_url())\n+    Base.metadata.create_all(engine)\n+    \n+    # Seed the database\n+    sm = sessionmaker(bind=engine, expire_on_commit=False)\n+    with sm() as session:\n+        seed(session)\n+    \n+    # Create test client\n+    client = TestClient(app)\n+    return client\n+\n+\n+def test_get_jpy_event(client):\n+    \"\"\"Test that JPY event is returned with integer price.\"\"\"\n+    response = client.get(\"/events/2\")\n+    assert response.status_code == 200\n+    data = response.json()\n+    print(f\"JPY event data: {data}\")\n+    assert data[\"currency\"] == \"JPY\"\n+    assert data[\"price\"] == \"1200\"  # Should be integer without decimals\n+\n+\n+def test_create_jpy_event(client):\n+    \"\"\"Test creating a JPY event with fractional price rounds to integer.\"\"\"\n+    # This would need authentication, so let's skip for now\n+    pass\n+\n+\n+if __name__ == \"__main__\":\n+    pytest.main([__file__, \"-v\"])\n--- a/test_jpy_edge_cases.py\n+++ b/test_jpy_edge_cases.py\n@@ -0,0 +1,47 @@\n+\"\"\"Test edge cases for JPY rounding.\"\"\"\n+from decimal import Decimal\n+from app import money\n+\n+\n+def test_jpy_rounding_half_up():\n+    \"\"\"Test that JPY uses round-half-up correctly.\"\"\"\n+    # 1200.5 should round up to 1201\n+    assert money.quantize(Decimal(\"1200.5\"), \"JPY\") == Decimal(\"1201\")\n+    # 1200.499 should round down to 1200\n+    assert money.quantize(Decimal(\"1200.499\"), \"JPY\") == Decimal(\"1200\")\n+    # 1200.501 should round up to 1201\n+    assert money.quantize(Decimal(\"1200.501\"), \"JPY\") == Decimal(\"1201\")\n+\n+\n+def test_jpy_rounding_negative():\n+    \"\"\"Test that negative JPY amounts round correctly.\"\"\"\n+    # -1200.5 should round to -1201 (away from zero)\n+    assert money.quantize(Decimal(\"-1200.5\"), \"JPY\") == Decimal(\"-1201\")\n+    # -1200.499 should round to -1200\n+    assert money.quantize(Decimal(\"-1200.499\"), \"JPY\") == Decimal(\"-1200\")\n+\n+\n+def test_jpy_zero():\n+    \"\"\"Test that zero JPY works correctly.\"\"\"\n+    assert money.quantize(Decimal(\"0\"), \"JPY\") == Decimal(\"0\")\n+    assert money.quantize(Decimal(\"0.0\"), \"JPY\") == Decimal(\"0\")\n+    assert money.quantize(Decimal(\"0.49\"), \"JPY\") == Decimal(\"0\")\n+    assert money.quantize(Decimal(\"0.5\"), \"JPY\") == Decimal(\"1\")\n+\n+\n+def test_jpy_large_numbers():\n+    \"\"\"Test that large JPY amounts work correctly.\"\"\"\n+    assert money.quantize(Decimal(\"999999999999.99\"), \"JPY\") == Decimal(\"1000000000000\")\n+\n+\n+def test_jpy_rendering_various():\n+    \"\"\"Test rendering of various JPY amounts.\"\"\"\n+    assert money.render(Decimal(\"0\"), \"JPY\") == \"0\"\n+    assert money.render(Decimal(\"1\"), \"JPY\") == \"1\"\n+    assert money.render(Decimal(\"1000\"), \"JPY\") == \"1000\"\n+    assert money.render(Decimal(\"1200.5\"), \"JPY\") == \"1201\"\n+\n+\n+if __name__ == \"__main__\":\n+    import pytest\n+    pytest.main([__file__, \"-v\"])\n--- a/test_jpy_integration.py\n+++ b/test_jpy_integration.py\n@@ -0,0 +1,79 @@\n+\"\"\"Integration tests for JPY currency handling.\"\"\"\n+from decimal import Decimal\n+import pytest\n+\n+\n+@pytest.mark.asyncio\n+async def test_get_jpy_event(client):\n+    \"\"\"Test that JPY event is returned with integer price (no decimals).\"\"\"\n+    response = await client.get(\"/events/2\")\n+    assert response.status_code == 200\n+    data = response.json()\n+    print(f\"JPY event data: {data}\")\n+    assert data[\"currency\"] == \"JPY\"\n+    assert data[\"price\"] == \"1200\"  # Should be integer without decimals\n+\n+\n+@pytest.mark.asyncio\n+async def test_create_jpy_event_with_fractional_price(client, auth_headers, tokens):\n+    \"\"\"Test creating a JPY event with fractional price rounds to integer.\"\"\"\n+    response = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"Tokyo Conference\",\n+            \"starts_at\": \"2026-07-01T10:00:00Z\",\n+            \"capacity\": 50,\n+            \"price\": \"1500.75\",  # Fractional JPY\n+            \"currency\": \"JPY\",\n+        },\n+    )\n+    assert response.status_code == 201\n+    data = response.json()\n+    print(f\"Created JPY event: {data}\")\n+    assert data[\"currency\"] == \"JPY\"\n+    # Should round to 1501 using round-half-up\n+    assert data[\"price\"] == \"1501\"\n+\n+\n+@pytest.mark.asyncio\n+async def test_create_jpy_event_with_whole_price(client, auth_headers, tokens):\n+    \"\"\"Test creating a JPY event with whole price stays as integer.\"\"\"\n+    response = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"Osaka Meetup\",\n+            \"starts_at\": \"2026-08-01T10:00:00Z\",\n+            \"capacity\": 30,\n+            \"price\": \"2000\",  # Whole JPY\n+            \"currency\": \"JPY\",\n+        },\n+    )\n+    assert response.status_code == 201\n+    data = response.json()\n+    print(f\"Created JPY event: {data}\")\n+    assert data[\"currency\"] == \"JPY\"\n+    assert data[\"price\"] == \"2000\"\n+\n+\n+@pytest.mark.asyncio\n+async def test_charge_jpy_payment(client, auth_headers, tokens):\n+    \"\"\"Test charging a JPY payment.\"\"\"\n+    # First, let's use the seeded JPY event (id=2)\n+    headers = {\n+        **auth_headers(tokens[\"dana\"]),\n+        \"Idempotency-Key\": \"test-jpy-payment-001\",\n+    }\n+    response = await client.post(\n+        \"/payments\", headers=headers, json={\"event_id\": 2}\n+    )\n+    assert response.status_code == 201\n+    data = response.json()\n+    print(f\"JPY payment: {data}\")\n+    assert data[\"currency\"] == \"JPY\"\n+    assert data[\"amount\"] == \"1200\"  # Should be integer without decimals\n+\n+\n+if __name__ == \"__main__\":\n+    pytest.main([__file__, \"-v\", \"-s\"])\n--- a/test_jpy_rounding.py\n+++ b/test_jpy_rounding.py\n@@ -0,0 +1,32 @@\n+\"\"\"Test JPY rounding behavior.\"\"\"\n+from decimal import Decimal\n+from app import money\n+\n+\n+def test_jpy_rounding_to_integer():\n+    \"\"\"JPY should round to whole numbers (0 decimal places).\"\"\"\n+    # Test that fractional JPY amounts are rounded to integers\n+    result = money.quantize(Decimal(\"1200.75\"), \"JPY\")\n+    print(f\"1200.75 JPY quantized: {result}\")\n+    assert result == Decimal(\"1201\"), f\"Expected 1201, got {result}\"\n+\n+\n+def test_jpy_rendering_no_decimals():\n+    \"\"\"JPY should render without decimal places.\"\"\"\n+    result = money.render(Decimal(\"1200\"), \"JPY\")\n+    print(f\"1200 JPY rendered: {result}\")\n+    assert result == \"1200\", f\"Expected '1200', got {result}\"\n+\n+\n+def test_jpy_rendering_with_fractional_input():\n+    \"\"\"JPY should render fractional inputs as whole numbers.\"\"\"\n+    result = money.render(Decimal(\"1200.75\"), \"JPY\")\n+    print(f\"1200.75 JPY rendered: {result}\")\n+    assert result == \"1201\", f\"Expected '1201', got {result}\"\n+\n+\n+if __name__ == \"__main__\":\n+    test_jpy_rounding_to_integer()\n+    test_jpy_rendering_no_decimals()\n+    test_jpy_rendering_with_fractional_input()\n+    print(\"All tests passed!\")\n--- a/test_seed_jpy.py\n+++ b/test_seed_jpy.py\n@@ -0,0 +1,22 @@\n+\"\"\"Test that seed data works with JPY.\"\"\"\n+from app import money\n+\n+\n+def test_seed_jpy_price():\n+    \"\"\"Test that the seed JPY price of 1200 works correctly.\"\"\"\n+    result = money.quantize(\"1200\", \"JPY\")\n+    print(f\"Seed JPY price 1200 quantized: {result}\")\n+    assert result == 1200\n+\n+\n+def test_seed_jpy_render():\n+    \"\"\"Test that the seed JPY price renders correctly.\"\"\"\n+    result = money.render(\"1200\", \"JPY\")\n+    print(f\"Seed JPY price 1200 rendered: {result}\")\n+    assert result == \"1200\"\n+\n+\n+if __name__ == \"__main__\":\n+    test_seed_jpy_price()\n+    test_seed_jpy_render()\n+    print(\"Seed JPY tests passed!\")\n",
+    "files_changed": [
+      "app/money.py",
+      "test_currency_support.py",
+      "test_issue_04_fix.py",
+      "test_jpy_api.py",
+      "test_jpy_edge_cases.py",
+      "test_jpy_integration.py",
+      "test_jpy_rounding.py",
+      "test_seed_jpy.py"
+    ],
+    "lines_added": 367,
+    "lines_removed": 1,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; Fixed issue-04 by changing JPY from 2 to 0 decimal places in app/money.py. This ensures JPY amounts are rounded to integers and rendered without decimal points, while maintaining all existing USD and other currency functionality. All tests pass."
+  },
+  "verifier_test": null,
+  "validity": null,
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_money.py",
+    "passed": true,
+    "total": 4,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.081,
+    "stdout_tail": "....                                                                     [100%]\n4 passed in 0.05s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-04-m19s09kt/issue-04-judge/.junit/visible.xml"
+  },
+  "verifier": null,
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 5,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.082,
+    "stdout_tail": ".....                                                                    [100%]\n5 passed in 0.06s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-04-m19s09kt/issue-04-judge/.junit/gold.xml"
+  },
+  "mutation": [],
+  "decision": "REVIEW REQUIRED",
+  "runtime_sec": 833.738,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-04-baseline"
+}

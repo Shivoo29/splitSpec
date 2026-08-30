@@ -1,0 +1,168 @@
+{
+  "case_id": "issue-06",
+  "mode": "splitspec",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "verifier",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-3.1-flash-lite",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-06",
+    "summary": "A cancellation request for a registration that the requester does not own must be rejected and must not alter the registration.",
+    "invariants": [
+      "The system must verify that the authenticated user owns the registration identified in a cancellation request before performing any state change.",
+      "If the user does not own the registration, the cancellation request must be rejected and the registration's state must remain unchanged."
+    ],
+    "inputs": [
+      "Authenticated cancellation request targeting a registration ID that belongs to a different user."
+    ],
+    "expected_outputs": [
+      "An error response indicating lack of ownership (e.g., HTTP 403 Forbidden or equivalent).",
+      "The registration record remains in its prior state (e.g., still marked as active, no refunds issued, no audit log indicating cancellation)."
+    ],
+    "out_of_scope": [
+      "Cancellation of registrations owned by the requester.",
+      "Behavior of admin or privileged roles that may be allowed to cancel any registration.",
+      "Creation, payment, or other non‑cancellation endpoints."
+    ],
+    "ambiguities": [
+      "Exact HTTP status code or error payload that should be returned on ownership failure.",
+      "Whether there are any roles (e.g., admin) that are permitted to cancel registrations they do not own.",
+      "Specific audit‑logging requirements for rejected cancellation attempts."
+    ],
+    "confidence": "high"
+  },
+  "patch": {
+    "case_id": "issue-06",
+    "diff": "--- a/app/routes/registrations.py\n+++ b/app/routes/registrations.py\n@@ -151,6 +151,8 @@\n     reg = session.get(Registration, registration_id)\n     if reg is None:\n         raise HTTPException(status_code=404, detail=\"registration not found\")\n+    if reg.user_id != user.id:\n+        raise HTTPException(status_code=403, detail=\"not authorized to cancel this registration\")\n     if reg.status == \"cancelled\":\n         raise HTTPException(status_code=400, detail=\"registration already cancelled\")\n     reg.status = \"cancelled\"\n--- a/visible_tests/issue-06/test_cancel_comprehensive.py\n+++ b/visible_tests/issue-06/test_cancel_comprehensive.py\n@@ -0,0 +1,58 @@\n+\"\"\"Comprehensive tests for cancellation ownership checks.\"\"\"\n+from __future__ import annotations\n+\n+\n+async def test_cancel_own_registration_succeeds(client, auth_headers, tokens):\n+    # Alice cancels her own registration (id=3)\n+    r = await client.delete(\"/registrations/3\", headers=auth_headers(tokens[\"alice\"]))\n+    assert r.status_code == 200\n+    assert r.json()[\"status\"] == \"cancelled\"\n+\n+\n+async def test_cancel_others_registration_fails(client, auth_headers, tokens):\n+    # Bob tries to cancel Alice's registration (id=1)\n+    r = await client.delete(\"/registrations/1\", headers=auth_headers(tokens[\"bob\"]))\n+    assert r.status_code == 403\n+    \n+    # Verify Alice's registration is still confirmed\n+    r = await client.get(\"/registrations\", headers=auth_headers(tokens[\"alice\"]))\n+    assert r.status_code == 200\n+    registrations = r.json()\n+    reg1 = next((reg for reg in registrations if reg[\"id\"] == 1), None)\n+    assert reg1 is not None\n+    assert reg1[\"status\"] == \"confirmed\"\n+\n+\n+async def test_cancel_cancelled_registration_fails(client, auth_headers, tokens):\n+    # Bob's registration (id=2) is already cancelled\n+    r = await client.delete(\"/registrations/2\", headers=auth_headers(tokens[\"bob\"]))\n+    assert r.status_code == 400\n+    assert \"already cancelled\" in r.json()[\"detail\"]\n+\n+\n+async def test_cancel_nonexistent_registration_fails(client, auth_headers, tokens):\n+    # Try to cancel a registration that doesn't exist\n+    r = await client.delete(\"/registrations/999\", headers=auth_headers(tokens[\"alice\"]))\n+    assert r.status_code == 404\n+    assert \"not found\" in r.json()[\"detail\"]\n+\n+\n+async def test_multiple_users_cannot_cancel_each_others_registrations(client, auth_headers, tokens):\n+    # Carol tries to cancel Alice's registration (id=1)\n+    r = await client.delete(\"/registrations/1\", headers=auth_headers(tokens[\"carol\"]))\n+    assert r.status_code == 403\n+    \n+    # Dana tries to cancel Carol's registration (id=4)\n+    r = await client.delete(\"/registrations/4\", headers=auth_headers(tokens[\"dana\"]))\n+    assert r.status_code == 403\n+    \n+    # Verify both registrations are still confirmed\n+    r = await client.get(\"/registrations\", headers=auth_headers(tokens[\"alice\"]))\n+    alice_regs = r.json()\n+    reg1 = next((reg for reg in alice_regs if reg[\"id\"] == 1), None)\n+    assert reg1[\"status\"] == \"confirmed\"\n+    \n+    r = await client.get(\"/registrations\", headers=auth_headers(tokens[\"carol\"]))\n+    carol_regs = r.json()\n+    reg4 = next((reg for reg in carol_regs if reg[\"id\"] == 4), None)\n+    assert reg4[\"status\"] == \"confirmed\"\n--- a/visible_tests/issue-06/test_cancel_ownership.py\n+++ b/visible_tests/issue-06/test_cancel_ownership.py\n@@ -0,0 +1,18 @@\n+\"\"\"Visible: test that cancellation requires ownership.\"\"\"\n+from __future__ import annotations\n+\n+\n+async def test_cancel_others_registration_is_forbidden(client, auth_headers, tokens):\n+    # Alice (user_id=1) owns registration_id=1\n+    # Bob (user_id=2) should not be able to cancel Alice's registration\n+    r = await client.delete(\"/registrations/1\", headers=auth_headers(tokens[\"bob\"]))\n+    assert r.status_code == 403\n+    \n+    # Verify the registration is still confirmed (not cancelled)\n+    r = await client.get(\"/registrations\", headers=auth_headers(tokens[\"alice\"]))\n+    assert r.status_code == 200\n+    registrations = r.json()\n+    # Find registration_id=1\n+    reg1 = next((reg for reg in registrations if reg[\"id\"] == 1), None)\n+    assert reg1 is not None\n+    assert reg1[\"status\"] == \"confirmed\"\n",
+    "files_changed": [
+      "app/routes/registrations.py",
+      "visible_tests/issue-06/test_cancel_comprehensive.py",
+      "visible_tests/issue-06/test_cancel_ownership.py"
+    ],
+    "lines_added": 78,
+    "lines_removed": 0,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; ## Summary I successfully fixed the missing ownership check on registration cancellation in the EventPulse application. ### Changes Made **File Modified:** `app/routes/registrations.py` **Change:** Added an ownership check in the `cancel` endpoint to ensure that users can only cancel their own registrations. ```python @router.delete(\"/{registration_id}\", response_model=RegistrationOut) def cancel( registration_id: int, request: Request, user: User = Depends(get_current_user), # noqa: B008 session: Session = Depends(get_session), # noqa: B008 ) -> dict: reg = session.get(Registration, registrat... [truncated, 2089 chars; full reply in trajectory.jsonl]"
+  },
+  "verifier_test": {
+    "case_id": "issue-06",
+    "filename": "test_security.py",
+    "contents": "import pytest\nimport httpx\n\n@pytest.mark.asyncio\nasync def test_cannot_cancel_others_registration(client, auth_headers, tokens):\n    # Setup: \n    # Alice (user_id=1) owns registration ID 3 (Event 3, Status=confirmed)\n    # Bob (user_id=2)\n    \n    # 1. Bob tries to cancel Alice's registration 3\n    r = await client.delete(\"/registrations/3\", headers=auth_headers(tokens[\"bob\"]))\n    \n    # Invariant: Must be rejected because Bob does not own registration 3.\n    # The application code currently allows this (based on the lack of check),\n    # so we expect it to fail (i.e., return 200 or similar instead of 403).\n    # We assert that it *should* have failed.\n    assert r.status_code != 200, \"Bob should not be able to cancel Alice's registration (received status \" + str(r.status_code) + \")\"\n    \n    # 2. Verify the registration was not cancelled in the database\n    r = await client.get(\"/registrations\", headers=auth_headers(tokens[\"alice\"]))\n    assert r.status_code == 200\n    regs = r.json()\n    alice_reg = next((reg for reg in regs if reg[\"id\"] == 3), None)\n    assert alice_reg is not None\n    assert alice_reg[\"status\"] == \"confirmed\", \"Alice's registration status should remain confirmed\"\n",
+    "run_command": "pytest test_security.py",
+    "invariant": "A cancellation request for a registration must be rejected if the authenticated user is not the owner of that registration, and the registration must remain in its original state.",
+    "assumptions": [
+      "Registration ID 3 is initially owned by Alice (User ID 1) and its status is 'confirmed'.",
+      "Bob is a valid user (User ID 2) who is authenticated but does not own registration ID 3.",
+      "The system rejects non-authorized attempts with a status code other than 200 (e.g., 403)."
+    ],
+    "confidence": "high",
+    "frozen_sha256": "d27750e7f5427cdfd42de13493a6c7ef7db097d484b248de4cd611ed1ec567c7"
+  },
+  "validity": {
+    "compiles": true,
+    "runs": true,
+    "fails_on_original_bug": true,
+    "passed": true,
+    "reason": "test failed on the buggy code (1 failures) as expected"
+  },
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_registrations.py",
+    "passed": true,
+    "total": 5,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.178,
+    "stdout_tail": ".....                                                                    [100%]\n5 passed in 0.09s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-06-xo0sz6ac/issue-06-judge/.junit/visible.xml"
+  },
+  "verifier": {
+    "label": "verifier",
+    "command": "pytest -q --junitxml=/workspace/.junit/verifier.xml test_security.py",
+    "passed": true,
+    "total": 1,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.106,
+    "stdout_tail": ".                                                                        [100%]\n1 passed in 0.04s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-06-xo0sz6ac/issue-06-judge/.junit/verifier.xml"
+  },
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 2,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.119,
+    "stdout_tail": "..                                                                       [100%]\n2 passed in 0.06s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-06-xo0sz6ac/issue-06-judge/.junit/gold.xml"
+  },
+  "mutation": [
+    {
+      "mutant_id": "m06-1",
+      "description": "original bug: cancelling a registration never verifies ownership",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m06-2",
+      "description": "ownership is checked only after the already-cancelled check, leaking state of foreign rows",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m06-3",
+      "description": "foreign cancellations get 403 but the registration is flipped to cancelled first",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m06-4",
+      "description": "silently weakens the visible tests while the missing ownership check remains",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ],
+  "decision": "ACCEPT",
+  "runtime_sec": 467.209,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-06-splitspec"
+}

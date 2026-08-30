@@ -1,0 +1,204 @@
+--- a/app/routes/events.py
++++ b/app/routes/events.py
+@@ -13,7 +13,7 @@
+ from app.auth import get_current_user
+ from app.db import get_session
+ from app.models import Event, User
+-from app.timeutil import iso8601_utc
++from app.timeutil import iso8601_utc, to_utc_naive
+ 
+ router = APIRouter(prefix="/events", tags=["events"])
+ 
+@@ -78,7 +78,7 @@
+     event = Event(
+         title=payload.title,
+         description=payload.description,
+-        starts_at=payload.starts_at.replace(tzinfo=None),
++        starts_at=to_utc_naive(payload.starts_at),
+         capacity=payload.capacity,
+         price=money.quantize(payload.price, payload.currency),
+         currency=payload.currency,
+--- a/visible_tests/issue-03/test_issue_examples.py
++++ b/visible_tests/issue-03/test_issue_examples.py
+@@ -0,0 +1,46 @@
++"""Test the exact examples from the issue description."""
++from __future__ import annotations
++
++
++async def test_issue_example_plus_0200(client, auth_headers, tokens):
++    # Test the exact example from the issue: POST /events with start_time = "2023-01-01T10:00:00+02:00"
++    r = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "Test Event",
++            "starts_at": "2023-01-01T10:00:00+02:00",
++            "capacity": 5,
++            "price": "10.00",
++        },
++    )
++    assert r.status_code == 201
++    
++    event_id = r.json()["id"]
++    
++    # GET /events/{id} should return start_time = "2023-01-01T08:00:00Z"
++    got = await client.get(f"/events/{event_id}")
++    assert got.status_code == 200
++    assert got.json()["starts_at"] == "2023-01-01T08:00:00+00:00"
++
++
++async def test_issue_example_utc(client, auth_headers, tokens):
++    # Test the exact example from the issue: POST /events with start_time = "2023-01-01T10:00:00Z"
++    r = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "UTC Event",
++            "starts_at": "2023-01-01T10:00:00Z",
++            "capacity": 5,
++            "price": "10.00",
++        },
++    )
++    assert r.status_code == 201
++    
++    event_id = r.json()["id"]
++    
++    # GET /events/{id} should return start_time = "2023-01-01T10:00:00Z"
++    got = await client.get(f"/events/{event_id}")
++    assert got.status_code == 200
++    assert got.json()["starts_at"] == "2023-01-01T10:00:00+00:00"
+--- a/visible_tests/issue-03/test_timezone_edge_cases.py
++++ b/visible_tests/issue-03/test_timezone_edge_cases.py
+@@ -0,0 +1,77 @@
++"""Test edge cases for timezone handling."""
++from __future__ import annotations
++
++
++async def test_negative_timezone_offset(client, auth_headers, tokens):
++    # Test with -05:00 timezone offset (e.g., Eastern Time)
++    # 2023-01-01T10:00:00-05:00 should be stored as 2023-01-01T15:00:00Z
++    r = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "New York Meeting",
++            "starts_at": "2023-01-01T10:00:00-05:00",
++            "capacity": 5,
++            "price": "10.00",
++        },
++    )
++    assert r.status_code == 201
++    # The response should show the UTC equivalent (10:00 ET = 15:00 UTC)
++    assert r.json()["starts_at"] == "2023-01-01T15:00:00+00:00"
++    
++    event_id = r.json()["id"]
++    
++    # Retrieve the event and verify it returns the UTC instant
++    got = await client.get(f"/events/{event_id}")
++    assert got.status_code == 200
++    assert got.json()["starts_at"] == "2023-01-01T15:00:00+00:00"
++
++
++async def test_utc_with_explicit_offset(client, auth_headers, tokens):
++    # Test with +00:00 timezone offset (explicit UTC)
++    # 2023-01-01T10:00:00+00:00 should remain 2023-01-01T10:00:00+00:00
++    r = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "UTC Meeting",
++            "starts_at": "2023-01-01T10:00:00+00:00",
++            "capacity": 5,
++            "price": "10.00",
++        },
++    )
++    assert r.status_code == 201
++    # The response should show the same UTC time
++    assert r.json()["starts_at"] == "2023-01-01T10:00:00+00:00"
++    
++    event_id = r.json()["id"]
++    
++    # Retrieve the event and verify it returns the same UTC instant
++    got = await client.get(f"/events/{event_id}")
++    assert got.status_code == 200
++    assert got.json()["starts_at"] == "2023-01-01T10:00:00+00:00"
++
++
++async def test_different_timezone_offsets(client, auth_headers, tokens):
++    # Test with +08:00 timezone offset (e.g., China Standard Time)
++    # 2023-01-01T12:00:00+08:00 should be stored as 2023-01-01T04:00:00Z
++    r = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "Beijing Meeting",
++            "starts_at": "2023-01-01T12:00:00+08:00",
++            "capacity": 5,
++            "price": "10.00",
++        },
++    )
++    assert r.status_code == 201
++    # The response should show the UTC equivalent (12:00 CST = 04:00 UTC)
++    assert r.json()["starts_at"] == "2023-01-01T04:00:00+00:00"
++    
++    event_id = r.json()["id"]
++    
++    # Retrieve the event and verify it returns the UTC instant
++    got = await client.get(f"/events/{event_id}")
++    assert got.status_code == 200
++    assert got.json()["starts_at"] == "2023-01-01T04:00:00+00:00"
+--- a/visible_tests/issue-03/test_timezone_offset.py
++++ b/visible_tests/issue-03/test_timezone_offset.py
+@@ -0,0 +1,52 @@
++"""Test timezone offset handling for event creation."""
++from __future__ import annotations
++
++
++async def test_timezone_offset_conversion(client, auth_headers, tokens):
++    # Test with +02:00 timezone offset
++    # 2023-01-01T10:00:00+02:00 should be stored as 2023-01-01T08:00:00Z
++    r = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "Meeting with timezone",
++            "starts_at": "2023-01-01T10:00:00+02:00",
++            "capacity": 5,
++            "price": "10.00",
++        },
++    )
++    assert r.status_code == 201
++    # The response should show the UTC equivalent
++    assert r.json()["starts_at"] == "2023-01-01T08:00:00+00:00"
++    
++    event_id = r.json()["id"]
++    
++    # Retrieve the event and verify it returns the UTC instant
++    got = await client.get(f"/events/{event_id}")
++    assert got.status_code == 200
++    assert got.json()["starts_at"] == "2023-01-01T08:00:00+00:00"
++
++
++async def test_utc_timezone_unchanged(client, auth_headers, tokens):
++    # Test with UTC timezone (Z)
++    # 2023-01-01T10:00:00Z should remain 2023-01-01T10:00:00Z
++    r = await client.post(
++        "/events",
++        headers=auth_headers(tokens["alice"]),
++        json={
++            "title": "UTC Meeting",
++            "starts_at": "2023-01-01T10:00:00Z",
++            "capacity": 5,
++            "price": "10.00",
++        },
++    )
++    assert r.status_code == 201
++    # The response should show the same UTC time
++    assert r.json()["starts_at"] == "2023-01-01T10:00:00+00:00"
++    
++    event_id = r.json()["id"]
++    
++    # Retrieve the event and verify it returns the same UTC instant
++    got = await client.get(f"/events/{event_id}")
++    assert got.status_code == 200
++    assert got.json()["starts_at"] == "2023-01-01T10:00:00+00:00"

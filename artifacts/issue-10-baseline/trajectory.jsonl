@@ -1,0 +1,51 @@
+{"ts": 1788118489.6482053, "actor": "contract", "kind": "call", "case_id": "issue-10", "model": "openai/gpt-oss-120b"}
+{"ts": 1788118489.6483045, "actor": "contract", "kind": "tokens", "input_tokens": 959, "output_tokens": 1011, "model": "openai/gpt-oss-120b"}
+{"ts": 1788118489.6483357, "actor": "contract", "kind": "parsed", "case_id": "issue-10", "confidence": "medium", "n_invariants": 2, "n_ambiguities": 4}
+{"ts": 1788118491.5604086, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1056, "output_tokens": 34, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118491.5611467, "actor": "fixer", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788118492.9757013, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1433, "output_tokens": 32, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118492.975906, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/money.py", "chars": 1234, "truncated": false}
+{"ts": 1788118494.0180948, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1784, "output_tokens": 37, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118494.0182815, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "visible_tests/issue-10/test_money_rounding.py", "chars": 869, "truncated": false}
+{"ts": 1788118496.4311283, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 2102, "output_tokens": 44, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118497.5155087, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-10/test_money_rounding.py", "-v"], "exit_code": 1, "duration_sec": 1.084}
+{"ts": 1788118500.8785598, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 2846, "output_tokens": 136, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118500.8787725, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/money.py", "chars": 1234, "truncated": false}
+{"ts": 1788118540.9162428, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 3301, "output_tokens": 414, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118540.9164817, "actor": "fixer", "kind": "tool_call", "tool": "write_file", "path": "app/money.py", "chars": 1244}
+{"ts": 1788118542.2473247, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 3730, "output_tokens": 43, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118543.3276985, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-10/test_money_rounding.py", "-v"], "exit_code": 0, "duration_sec": 1.08}
+{"ts": 1788118551.9249692, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4037, "output_tokens": 42, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118553.0134776, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "-v"], "exit_code": 5, "duration_sec": 1.088}
+{"ts": 1788118554.434607, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4235, "output_tokens": 25, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118554.4348984, "actor": "fixer", "kind": "tool_call", "tool": "list_files", "path": "visible_tests", "entries": 2}
+{"ts": 1788118565.2962382, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4284, "output_tokens": 460, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118565.2964363, "actor": "fixer", "kind": "tool_call", "tool": "write_file", "path": "test_additional_cases.py", "chars": 1183}
+{"ts": 1788118566.9257913, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4761, "output_tokens": 20, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118566.9258773, "actor": "fixer", "kind": "tool_error", "tool": "run_tests", "reason": "refused", "detail": "only 'pytest' invocations are allowed"}
+{"ts": 1788118568.6659923, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4798, "output_tokens": 23, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118569.7520437, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_additional_cases.py", "-v"], "exit_code": 0, "duration_sec": 1.086}
+{"ts": 1788118572.0450208, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 5045, "output_tokens": 46, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118572.0468771, "actor": "fixer", "kind": "tool_call", "tool": "search", "pattern": "from app import money|import app.money", "matches": 5}
+{"ts": 1788118573.8271222, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 5167, "output_tokens": 28, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118573.8273458, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/routes/events.py", "chars": 3946, "truncated": false}
+{"ts": 1788118584.6883116, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 6233, "output_tokens": 16, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118584.6885355, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/routes/payments.py", "chars": 3195, "truncated": false}
+{"ts": 1788118585.7401028, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 7056, "output_tokens": 12, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118585.7402763, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "seed.py", "chars": 4466, "truncated": false}
+{"ts": 1788118589.789114, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8483, "output_tokens": 103, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118590.8547313, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-10/test_money_rounding.py", "-v"], "exit_code": 0, "duration_sec": 1.065}
+{"ts": 1788118602.4570632, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8850, "output_tokens": 32, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118602.457138, "actor": "fixer", "kind": "tool_error", "tool": "run_tests", "reason": "refused", "detail": "only 'pytest' invocations are allowed"}
+{"ts": 1788118603.9930072, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8899, "output_tokens": 23, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118603.9930878, "actor": "fixer", "kind": "tool_error", "tool": "run_tests", "reason": "refused", "detail": "only 'pytest' invocations are allowed"}
+{"ts": 1788118605.8382347, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8939, "output_tokens": 19, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118605.8394516, "actor": "fixer", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 45}
+{"ts": 1788118630.9959395, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 9363, "output_tokens": 676, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788118630.9960246, "actor": "fixer", "kind": "tool_call", "tool": "finish", "chars": 790}
+{"ts": 1788118630.9960473, "actor": "fixer", "kind": "agent_end", "stop_reason": "finished", "final_message_len": 790, "calls": 21, "tokens_generated": 2265, "billed_tokens": 108667}
+{"ts": 1788118630.997844, "actor": "fixer", "kind": "patch", "case_id": "issue-10", "stop_reason": "finished", "stop_ok": true, "files": ["app/money.py", "test_additional_cases.py"], "lines_added": 37, "lines_removed": 3, "touched_tests": false, "diff_len": 2105}
+{"ts": 1788118632.1024544, "actor": "judge", "kind": "suite", "case_id": "issue-10", "label": "visible", "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_money_rounding.py", "exit_code": 0, "passed": true, "total": 3, "failures": 0, "errors": 0, "duration_sec": 1.101}
+{"ts": 1788118632.1025047, "actor": "judge", "kind": "verifier_skipped", "case_id": "issue-10", "mode": "baseline", "reason": "no_frozen_test"}
+{"ts": 1788118633.2080247, "actor": "judge", "kind": "suite", "case_id": "issue-10", "label": "gold", "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold", "exit_code": 0, "passed": true, "total": 5, "failures": 0, "errors": 0, "duration_sec": 1.105}
+{"ts": 1788118633.2135825, "actor": "report", "kind": "written", "case_id": "issue-10", "mode": "baseline", "artifact_dir": "artifacts/issue-10-baseline", "degraded": false, "cost_usd": 0.0, "runtime_sec": 146.082, "models": [["contract", "openai/gpt-oss-120b"], ["fixer", "devstral-2512"]]}

@@ -1,0 +1,30 @@
+{"ts": 1788112081.4082892, "actor": "contract", "kind": "call", "case_id": "issue-01", "model": "openai/gpt-oss-120b"}
+{"ts": 1788112081.4084167, "actor": "contract", "kind": "tokens", "input_tokens": 938, "output_tokens": 679, "model": "openai/gpt-oss-120b"}
+{"ts": 1788112081.408488, "actor": "contract", "kind": "parsed", "case_id": "issue-01", "confidence": "medium", "n_invariants": 2, "n_ambiguities": 4}
+{"ts": 1788112082.5896504, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 957, "output_tokens": 34, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788112082.5903788, "actor": "fixer", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788112083.8262122, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1330, "output_tokens": 39, "finish_reason": "tool_calls", "tool_calls": 2}
+{"ts": 1788112083.82646, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/routes/events.py", "chars": 3885, "truncated": false}
+{"ts": 1788112083.826551, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/models.py", "chars": 5001, "truncated": false}
+{"ts": 1788112084.9159749, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 1089, "output_tokens": 16, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788112084.916699, "actor": "verifier", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788112085.0302062, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 3611, "output_tokens": 33, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788112085.0303535, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "visible_tests/issue-01/test_events.py", "chars": 1497, "truncated": false}
+{"ts": 1788112087.0005832, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4056, "output_tokens": 45, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788112087.0009825, "actor": "fixer", "kind": "tool_call", "tool": "search", "pattern": "test.*empty|test.*negative|test.*validation", "matches": 0}
+{"ts": 1788112088.025489, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4106, "output_tokens": 42, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788112088.025724, "actor": "fixer", "kind": "tool_call", "tool": "search", "pattern": "test.*empty|test.*negative|test.*validation", "matches": 0}
+{"ts": 1788112088.8460972, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 1507, "output_tokens": 22, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788112088.8462992, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "app/routes/events.py", "chars": 3885, "truncated": false}
+{"ts": 1788112089.6653097, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4153, "output_tokens": 39, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788112090.7930505, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-01/test_events.py", "-v"], "exit_code": 0, "duration_sec": 1.127}
+{"ts": 1788112093.8131604, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 2724, "output_tokens": 29, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788112093.813345, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "visible_tests/issue-01/test_events.py", "chars": 1497, "truncated": false}
+{"ts": 1788112096.0469697, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 3237, "output_tokens": 340, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788112096.0471797, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "tests/test_issue_01.py", "chars": 962}
+{"ts": 1788112098.476314, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 3607, "output_tokens": 29, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788112099.5584698, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "tests/test_issue_01.py"], "exit_code": 1, "duration_sec": 1.082}
+{"ts": 1788112108.3052325, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 4327, "output_tokens": 505, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788112108.3053184, "actor": "verifier", "kind": "tool_call", "tool": "finish", "chars": 1599}
+{"ts": 1788112108.305343, "actor": "verifier", "kind": "agent_end", "stop_reason": "finished", "final_message_len": 1599, "calls": 6, "tokens_generated": 941, "billed_tokens": 17432}
+{"ts": 1788112108.305399, "actor": "verifier", "kind": "test", "case_id": "issue-01", "stop_reason": "finished", "filename": "test_issue_01.py", "invariant": "A request to create an event with an empty title or a negative ticket price must be rejected by the API (return a 4xx error code).", "confidence": "high", "n_assumptions": 3, "contents_len": 962}

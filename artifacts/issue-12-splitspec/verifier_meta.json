@@ -1,0 +1,13 @@
+{
+  "case_id": "issue-12",
+  "filename": "test_pagination_total.py",
+  "run_command": "pytest test_pagination_total.py",
+  "invariant": "For a GET request to /events, the response JSON must contain a field \"total\" whose value equals the total number of event records that satisfy the request\u2019s filter criteria, independent of the supplied limit and offset parameters.",
+  "assumptions": [
+    "The database is accessible via the app fixture.",
+    "Invalidating the cache is necessary to ensure the state reflects the new database content.",
+    "The total count should be 6 after seeding."
+  ],
+  "confidence": "high",
+  "frozen_sha256": "1b495b703aad05d0c83012e7c88e6cd0de2991ad61353ff5df9f26f51af08ed8"
+}

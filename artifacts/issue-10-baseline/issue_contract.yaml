@@ -1,0 +1,33 @@
+case_id: issue-10
+summary: "Invoice totals are one cent lower than the quoted amount for values that\
+  \ contain a half\u2011cent fraction."
+invariants:
+- "When a monetary value has a fractional component of exactly 0.005 (i.e., a half\u2011\
+  cent), the system must round that value up to the next cent rather than down."
+- "The invoice total presented to the customer must equal the quoted amount after\
+  \ applying the rounding\u2011up rule to any half\u2011cent components."
+inputs:
+- "A quoted monetary amount whose exact value ends in a half\u2011cent (e.g., 1.025,\
+  \ 2.035, 10.045)."
+- "A quoted monetary amount that does not end in a half\u2011cent (e.g., 1.02, 2.04)\
+  \ to verify normal rounding behavior."
+expected_outputs:
+- For an input of 1.025 the generated invoice total is 1.03.
+- For an input of 2.035 the generated invoice total is 2.04.
+- "For amounts without a half\u2011cent fraction the invoice total matches the standard\
+  \ rounding (e.g., 1.02 stays 1.02)."
+- "No invoice total is lower by one cent than the quoted amount when the quoted amount\
+  \ contains a half\u2011cent."
+out_of_scope:
+- "Rounding of tax, discounts, or other derived amounts unless they contain a half\u2011\
+  cent fraction."
+- "Currency conversion, multi\u2011currency handling, or locale\u2011specific formatting."
+- Database persistence, API authentication, or UI layout concerns.
+ambiguities:
+- Exact numeric type used for monetary values (Decimal, float, integer cents, etc.).
+- "Whether rounding is applied per line\u2011item before aggregation or only on the\
+  \ final total."
+- How negative amounts or refunds should be rounded.
+- Whether the rule applies to all monetary fields (e.g., tax, fees) or only to the
+  base price.
+confidence: medium

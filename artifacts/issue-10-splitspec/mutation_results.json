@@ -1,0 +1,36 @@
+{
+  "score": 1.0,
+  "killed": 4,
+  "denominator": 4,
+  "excluded_unkillable": [],
+  "results": [
+    {
+      "mutant_id": "m01-original-bug",
+      "description": "the seeded defect unchanged, bankers rounding on every amount",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m02-obvious-path-only",
+      "description": "special-cases the one amount from the report and rounds the rest half-even",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m03-right-value-wrong-state",
+      "description": "rounds correctly on render but stores the half-even value",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m04-weakens-the-test",
+      "description": "production code unchanged; the visible test's expectations are edited to match",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ]
+}

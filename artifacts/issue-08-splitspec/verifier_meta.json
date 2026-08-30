@@ -1,0 +1,12 @@
+{
+  "case_id": "issue-08",
+  "filename": "test_idempotency.py",
+  "run_command": "pytest test_idempotency.py",
+  "invariant": "For any given Idempotency-Key value, the payment service must create at most one payment record, and retries must return the original payment record identifier.",
+  "assumptions": [
+    "The application's payment endpoint (/payments) uses the 'Idempotency-Key' header.",
+    "The application assigns a unique integer ID to each payment record."
+  ],
+  "confidence": "high",
+  "frozen_sha256": "4be054b4119f8ea8370e2dbe69fd4fc26c056a2ee46db7acad6d11a3d8b209f6"
+}

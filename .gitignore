@@ -7,8 +7,17 @@ venv/
 .ruff_cache/
 node_modules/
 .next/
+# Run artifacts are the evidence behind every claim in the README, so the
+# committed set is what `python -m splitspec.report --from artifacts/` reads to
+# reproduce the result table with no provider keys. Workspaces and sandbox traces
+# are runtime noise and stay out.
 artifacts/*
 !artifacts/.gitkeep
+!artifacts/issue-*/
+!artifacts/live-check-issue-07/
+artifacts/**/*.sandbox.jsonl
+artifacts/**/.junit/
+artifacts/**/*.db
 trajectories/*
 !trajectories/.gitkeep
 *.db

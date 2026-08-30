@@ -1,0 +1,106 @@
+{
+  "case_id": "issue-08",
+  "mode": "baseline",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-08",
+    "summary": "Retrying a payment request with the same Idempotency-Key sometimes creates a second payment instead of being idempotent.",
+    "invariants": [
+      "For any given Idempotency-Key, the system must create at most one payment record.",
+      "A subsequent request with the same Idempotency-Key must return the same observable response as the original request and must not trigger a new payment creation."
+    ],
+    "inputs": [
+      "POST /payments (or equivalent) with a valid payload and an Idempotency-Key header; the request experiences a client‑side timeout before a response is received.",
+      "A second POST to the same endpoint with the identical Idempotency-Key and identical payload after the timeout."
+    ],
+    "expected_outputs": [
+      "Exactly one new payment record appears in the database (or persistent store).",
+      "The second request returns the same HTTP status code and response body as the first successful request.",
+      "No additional charge is sent to the external bank/processor for the second request."
+    ],
+    "out_of_scope": [
+      "Requests that use a different Idempotency-Key.",
+      "Endpoints unrelated to payment creation.",
+      "Behavior of network timeouts or client‑side retry logic beyond the Idempotency-Key semantics.",
+      "Bank‑side failures unrelated to duplicate request handling."
+    ],
+    "ambiguities": [
+      "Exact URL path, HTTP method, and required payload fields for the payment request.",
+      "Definition of the \"timeout\" condition (e.g., client‑side socket timeout, server‑side processing deadline).",
+      "The expected HTTP status code and response body for an idempotent retry.",
+      "Whether payment processing is synchronous or asynchronous, and how that affects when the Idempotency-Key check occurs.",
+      "Database schema details that record Idempotency-Key values.",
+      "Concurrency model (e.g., whether two requests can be processed in parallel) and any locking mechanisms."
+    ],
+    "confidence": "medium"
+  },
+  "patch": {
+    "case_id": "issue-08",
+    "diff": "--- a/app/routes/payments.py\n+++ b/app/routes/payments.py\n@@ -63,6 +63,16 @@\n     if currency != event.currency:\n         raise HTTPException(status_code=400, detail=\"charge currency must match the event currency\")\n \n+    # Check for existing payment with the same idempotency key BEFORE creating a new one\n+    existing = session.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))\n+    if existing is not None:\n+        if existing.user_id != user.id:\n+            raise HTTPException(\n+                status_code=409, detail=\"idempotency key belongs to another user\"\n+            ) from None\n+        response.status_code = 200\n+        return payment_payload(existing)\n+\n     payment = Payment(\n         user_id=user.id,\n         event_id=event.id,\n@@ -77,6 +87,7 @@\n         session.commit()\n     except IntegrityError:\n         session.rollback()\n+        # Another request may have created the payment while we were processing\n         existing = session.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))\n         if existing is not None:\n             if existing.user_id != user.id:\n@@ -87,10 +98,5 @@\n             return payment_payload(existing)\n         raise HTTPException(status_code=409, detail=\"idempotency key already in use\") from None\n \n-    existing = session.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))\n-    if existing is not None and existing.id != payment.id:\n-        # Another payment with the same key exists - but we already created ours!\n-        pass  # Don't raise, just return the new payment (wrong behavior)\n-\n     response.status_code = 201\n     return payment_payload(payment)\n--- a/cleanup.py\n+++ b/cleanup.py\n@@ -0,0 +1,4 @@\n+import os\n+os.remove(\"test_idempotency_fix.py\")\n+os.remove(\"test_race_condition.py\")\n+print(\"Cleanup complete\")\n--- a/test_idempotency_fix.py\n+++ b/test_idempotency_fix.py\n@@ -0,0 +1,49 @@\n+\"\"\"Test to verify the idempotency fix works correctly.\"\"\"\n+import pytest\n+from httpx import AsyncClient\n+\n+\n+async def test_idempotency_prevents_duplicates(client, auth_headers, tokens):\n+    \"\"\"Test that multiple requests with the same idempotency key don't create duplicate payments.\"\"\"\n+    headers = {**auth_headers(tokens[\"alice\"]), \"Idempotency-Key\": \"test-duplicate-key\"}\n+    \n+    # First request - should create a payment\n+    first_response = await client.post(\"/payments\", headers=headers, json={\"event_id\": 1})\n+    assert first_response.status_code == 201\n+    first_payment = first_response.json()\n+    \n+    # Second request with same key - should return the same payment\n+    second_response = await client.post(\"/payments\", headers=headers, json={\"event_id\": 1})\n+    assert second_response.status_code == 200\n+    second_payment = second_response.json()\n+    \n+    # Verify they are the same payment\n+    assert first_payment[\"id\"] == second_payment[\"id\"]\n+    assert first_payment[\"amount\"] == second_payment[\"amount\"]\n+    assert first_payment[\"currency\"] == second_payment[\"currency\"]\n+    assert first_payment[\"status\"] == second_payment[\"status\"]\n+    \n+    # Third request with same key - should also return the same payment\n+    third_response = await client.post(\"/payments\", headers=headers, json={\"event_id\": 1})\n+    assert third_response.status_code == 200\n+    third_payment = third_response.json()\n+    \n+    assert first_payment[\"id\"] == third_payment[\"id\"]\n+\n+\n+async def test_idempotency_with_different_users(client, auth_headers, tokens):\n+    \"\"\"Test that idempotency key from one user cannot be used by another user.\"\"\"\n+    headers_alice = {**auth_headers(tokens[\"alice\"]), \"Idempotency-Key\": \"test-user-key\"}\n+    \n+    # Alice creates a payment\n+    alice_response = await client.post(\"/payments\", headers=headers_alice, json={\"event_id\": 1})\n+    assert alice_response.status_code == 201\n+    \n+    # Bob tries to use the same key - should fail\n+    headers_bob = {**auth_headers(tokens[\"bob\"]), \"Idempotency-Key\": \"test-user-key\"}\n+    bob_response = await client.post(\"/payments\", headers=headers_bob, json={\"event_id\": 1})\n+    assert bob_response.status_code == 409\n+\n+\n+if __name__ == \"__main__\":\n+    pytest.main([__file__, \"-v\"])\n--- a/test_race_condition.py\n+++ b/test_race_condition.py\n@@ -0,0 +1,20 @@\n+\"\"\"Test to demonstrate the race condition in idempotency key handling.\"\"\"\n+import asyncio\n+from httpx import AsyncClient\n+\n+\n+async def test_concurrent_requests_create_duplicate_payments():\n+    \"\"\"Test that concurrent requests with the same idempotency key don't create duplicates.\"\"\"\n+    # This test simulates what happens when a client times out and retries\n+    # Both requests should return the same payment, not create two\n+    \n+    # Note: This is a simplified test. In a real scenario, you'd need to\n+    # actually simulate concurrent execution to trigger the race condition.\n+    pass\n+\n+\n+if __name__ == \"__main__\":\n+    print(\"This test demonstrates the race condition issue.\")\n+    print(\"The bug is in payments.py where it doesn't properly handle\")\n+    print(\"the case where two requests with the same idempotency key\")\n+    print(\"are processed concurrently.\")\n",
+    "files_changed": [
+      "app/routes/payments.py",
+      "cleanup.py",
+      "test_idempotency_fix.py",
+      "test_race_condition.py"
+    ],
+    "lines_added": 84,
+    "lines_removed": 5,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; ## Summary I successfully fixed the idempotency issue in the payment processing system. The problem was that the original code didn't check for existing payments with the same idempotency key before creating a new payment, which could lead to duplicate payments when requests were retried. ### Changes Made **File: `app/routes/payments.py`** 1. **Added early idempotency check**: Before creating a new payment, the code now checks if a payment with the same idempotency key already exists. 2. **Fixed the logic flow**: The original code had a problematic section after the commit that would just pass... [truncated, 1872 chars; full reply in trajectory.jsonl]"
+  },
+  "verifier_test": null,
+  "validity": null,
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_payments.py",
+    "passed": true,
+    "total": 6,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.197,
+    "stdout_tail": "......                                                                   [100%]\n6 passed in 0.11s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-08-8w8mgh7y/issue-08-judge/.junit/visible.xml"
+  },
+  "verifier": null,
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 3,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.155,
+    "stdout_tail": "...                                                                      [100%]\n3 passed in 0.07s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-08-8w8mgh7y/issue-08-judge/.junit/gold.xml"
+  },
+  "mutation": [],
+  "decision": "REVIEW REQUIRED",
+  "runtime_sec": 251.881,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-08-baseline"
+}

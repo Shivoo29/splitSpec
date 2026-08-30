@@ -1,0 +1,94 @@
+{
+  "case_id": "issue-06",
+  "mode": "baseline",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-06",
+    "summary": "A cancellation request must be rejected when the authenticated user does not own the target registration, leaving the registration unchanged.",
+    "invariants": [
+      "The CancelRegistration operation must verify that the requester is the owner of the registration identified by the request.",
+      "If the requester is not the owner, the operation must not modify any data of the registration and must return an error indicating insufficient permission."
+    ],
+    "inputs": [
+      "Authenticated cancel request for a registration ID that belongs to the requester.",
+      "Authenticated cancel request for a registration ID that belongs to a different user."
+    ],
+    "expected_outputs": [
+      "For an owned registration: a successful response and the registration's status is updated to a cancelled state.",
+      "For a non‑owned registration: an error response (e.g., HTTP 403 Forbidden) and the registration's status and all other fields remain exactly as they were prior to the request."
+    ],
+    "out_of_scope": [
+      "Creation, update, or deletion of registrations other than cancellation.",
+      "Payment processing, event management, ticket issuance, caching, or any unrelated API endpoints."
+    ],
+    "ambiguities": [],
+    "confidence": "high"
+  },
+  "patch": {
+    "case_id": "issue-06",
+    "diff": "--- a/app/routes/registrations.py\n+++ b/app/routes/registrations.py\n@@ -151,6 +151,9 @@\n     reg = session.get(Registration, registration_id)\n     if reg is None:\n         raise HTTPException(status_code=404, detail=\"registration not found\")\n+    # Check if the authenticated user owns this registration\n+    if reg.user_id != user.id:\n+        raise HTTPException(status_code=403, detail=\"not authorized to cancel this registration\")\n     if reg.status == \"cancelled\":\n         raise HTTPException(status_code=400, detail=\"registration already cancelled\")\n     reg.status = \"cancelled\"\n--- a/visible_tests/issue-06/test_cancel_ownership.py\n+++ b/visible_tests/issue-06/test_cancel_ownership.py\n@@ -0,0 +1,17 @@\n+\"\"\"Visible: test that cancellation requires ownership.\"\"\"\n+from __future__ import annotations\n+\n+\n+async def test_cancel_someone_elses_registration_is_403(client, auth_headers, tokens):\n+    # Alice (user_id=1) tries to cancel Carol's registration (registration_id=4, user_id=3)\n+    r = await client.delete(\"/registrations/4\", headers=auth_headers(tokens[\"alice\"]))\n+    assert r.status_code == 403\n+    \n+    # Verify the registration status hasn't changed\n+    r = await client.get(\"/registrations\", headers=auth_headers(tokens[\"carol\"]))\n+    assert r.status_code == 200\n+    registrations = r.json()\n+    # Find registration with id=4\n+    reg4 = next((reg for reg in registrations if reg[\"id\"] == 4), None)\n+    assert reg4 is not None\n+    assert reg4[\"status\"] == \"confirmed\"  # Should still be confirmed, not cancelled\n",
+    "files_changed": [
+      "app/routes/registrations.py",
+      "visible_tests/issue-06/test_cancel_ownership.py"
+    ],
+    "lines_added": 20,
+    "lines_removed": 0,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; Fixed missing ownership check on registration cancellation by adding a simple user ID verification in the cancel endpoint. The fix ensures that only the owner of a registration can cancel it, returning HTTP 403 Forbidden for unauthorized attempts while leaving the registration data completely unchanged. All existing tests pass, and a new test was added to verify the ownership check works correctly."
+  },
+  "verifier_test": null,
+  "validity": null,
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_registrations.py",
+    "passed": true,
+    "total": 5,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.17,
+    "stdout_tail": ".....                                                                    [100%]\n5 passed in 0.09s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-06-7fgb1raz/issue-06-judge/.junit/visible.xml"
+  },
+  "verifier": null,
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 2,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.114,
+    "stdout_tail": "..                                                                       [100%]\n2 passed in 0.06s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-06-7fgb1raz/issue-06-judge/.junit/gold.xml"
+  },
+  "mutation": [],
+  "decision": "REVIEW REQUIRED",
+  "runtime_sec": 294.532,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-06-baseline"
+}

@@ -1,0 +1,95 @@
+--- a/app/routes/tickets.py
++++ b/app/routes/tickets.py
+@@ -46,4 +46,7 @@
+     # but a revoked ticket is not readable.
+     if ticket.registration.status != "confirmed":
+         raise HTTPException(status_code=404, detail="ticket revoked by cancellation")
++    # Users can only access their own tickets
++    if ticket.user_id != user.id:
++        raise HTTPException(status_code=404, detail="ticket not found")
+     return ticket_payload(ticket)
+--- a/test_manual_verification.py
++++ b/test_manual_verification.py
+@@ -0,0 +1,48 @@
++"""Manual verification of the fix."""
++import pytest
++import httpx
++import pytest_asyncio
++from app.main import create_app
++from app.timeutil import FixedClock
++from seed import ALICE_TOKEN, BOB_TOKEN, seed
++
++FIXED_NOW = "2026-01-01T12:00:00+00:00"
++
++
++@pytest_asyncio.fixture
++async def client():
++    application = create_app("sqlite://", clock=FixedClock.from_iso(FIXED_NOW))
++    with application.state.sessionmaker() as session:
++        seed(session)
++    transport = httpx.ASGITransport(app=application)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
++        yield ac
++
++
++@pytest.mark.asyncio
++async def test_manual_verification(client):
++    # Alice tries to access her own ticket (ticket 1)
++    r = await client.get("/tickets/1", headers={"Authorization": f"Bearer {ALICE_TOKEN}"})
++    print(f"Alice accessing her own ticket: {r.status_code}")
++    if r.status_code == 200:
++        print(f"Response: {r.json()}")
++    
++    # Alice tries to access Carol's ticket (ticket 4)
++    r = await client.get("/tickets/4", headers={"Authorization": f"Bearer {ALICE_TOKEN}"})
++    print(f"Alice accessing Carol's ticket: {r.status_code}")
++    if r.status_code == 200:
++        print(f"Response: {r.json()}")
++    else:
++        print(f"Response: {r.text}")
++    
++    # Bob tries to access Alice's ticket (ticket 1)
++    r = await client.get("/tickets/1", headers={"Authorization": f"Bearer {BOB_TOKEN}"})
++    print(f"Bob accessing Alice's ticket: {r.status_code}")
++    if r.status_code == 200:
++        print(f"Response: {r.json()}")
++    else:
++        print(f"Response: {r.text}")
++
++
++if __name__ == "__main__":
++    pytest.main([__file__, "-v", "-s"])
+--- a/visible_tests/issue-05/test_cross_user_access.py
++++ b/visible_tests/issue-05/test_cross_user_access.py
+@@ -0,0 +1,31 @@
++"""Visible: a user cannot read another user's ticket."""
++from __future__ import annotations
++
++
++async def test_user_cannot_read_another_users_ticket(client, auth_headers, tokens):
++    # Alice (user 1) tries to access Bob's ticket (ticket 2, which belongs to user 2)
++    # Note: ticket 2 has a cancelled registration, so it should return 404 anyway
++    # Let's test with Carol's ticket (ticket 4, which belongs to user 3)
++    r = await client.get("/tickets/4", headers=auth_headers(tokens["alice"]))
++    # Should return 403 or 404, not 200 with ticket details
++    assert r.status_code in (403, 404)
++    # Should not contain ticket details
++    if r.status_code == 200:
++        # If it returns 200, that's a bug - it should not contain ticket details
++        assert "code" not in r.json()
++        assert "user_id" not in r.json()
++    else:
++        # Expected behavior: error response without ticket details
++        assert r.status_code in (403, 404)
++
++
++async def test_bob_cannot_read_alices_ticket(client, auth_headers, tokens):
++    # Bob (user 2) tries to access Alice's ticket (ticket 1, which belongs to user 1)
++    r = await client.get("/tickets/1", headers=auth_headers(tokens["bob"]))
++    # Should return 403 or 404, not 200 with ticket details
++    assert r.status_code in (403, 404)
++    # Should not contain ticket details
++    if r.status_code == 200:
++        # If it returns 200, that's a bug
++        assert "code" not in r.json()
++        assert "user_id" not in r.json()

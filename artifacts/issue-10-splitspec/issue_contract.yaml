@@ -1,0 +1,20 @@
+case_id: issue-10
+summary: "Invoice totals are rounding down for amounts that have a half\u2011cent\
+  \ fraction, but finance policy requires those amounts to be rounded up to the next\
+  \ cent."
+invariants:
+- If the computed monetary amount has a fractional part equal to exactly half a cent
+  (0.005 of a dollar), the system must round the amount up to the next whole cent.
+inputs:
+- "A quote amount that after any internal calculation results in a value with a half\u2011\
+  cent fraction (e.g., $1.025, $2.135, $0.005)."
+expected_outputs:
+- The invoice total displayed (or stored) is the quoted amount rounded up to the nearest
+  cent (e.g., $1.03 for $1.025, $2.14 for $2.135, $0.01 for $0.005).
+out_of_scope:
+- "Rounding behavior for amounts that do not end in a half\u2011cent."
+- Currency handling other than the primary currency used by the system.
+- Tax, discount, or fee calculations that may affect the final amount.
+- Formatting or presentation details unrelated to the rounding rule.
+ambiguities: []
+confidence: high

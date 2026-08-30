@@ -1,0 +1,104 @@
+{
+  "case_id": "issue-03",
+  "mode": "baseline",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-03",
+    "summary": "Events created with a non‑UTC timezone offset are stored or returned with an incorrect conversion, causing the reported start time to be offset by the original timezone difference.",
+    "invariants": [
+      "When an event is created with a start_time that includes a non‑zero timezone offset, the system must store the corresponding UTC instant (i.e., start_time_UTC = start_time_local minus the offset).",
+      "When an event is retrieved, the reported start_time must represent the same absolute instant as the value supplied at creation; for inputs with an offset this typically means the API returns the UTC equivalent of the original local time.",
+      "When an event is created with a start_time already expressed in UTC, the stored and returned value must be unchanged."
+    ],
+    "inputs": [
+      "POST /events with a JSON body containing start_time = \"2023-01-01T10:00:00+02:00\" (or any other non‑zero offset).",
+      "POST /events with a JSON body containing start_time = \"2023-01-01T10:00:00Z\" (UTC).",
+      "GET /events/{id} for the events created above."
+    ],
+    "expected_outputs": [
+      "GET for the +02:00 case returns start_time = \"2023-01-01T08:00:00Z\" (the UTC instant corresponding to the original 10:00+02:00).",
+      "GET for the UTC case returns start_time = \"2023-01-01T10:00:00Z\".",
+      "The database record for the +02:00 case stores the UTC instant 2023‑01‑01T08:00:00Z."
+    ],
+    "out_of_scope": [
+      "Client‑side rendering or formatting of the date string.",
+      "Support for other date‑time fields unrelated to event start_time.",
+      "Migration of existing data that may already be stored incorrectly."
+    ],
+    "ambiguities": [
+      "Whether the API is required to return the start_time in UTC or preserve the original offset in the response.",
+      "Exact format of the date‑time string expected by the API (ISO‑8601, epoch milliseconds, etc.).",
+      "How naive (timezone‑less) datetime inputs should be interpreted."
+    ],
+    "confidence": "medium"
+  },
+  "patch": {
+    "case_id": "issue-03",
+    "diff": "--- a/app/routes/events.py\n+++ b/app/routes/events.py\n@@ -13,7 +13,7 @@\n from app.auth import get_current_user\n from app.db import get_session\n from app.models import Event, User\n-from app.timeutil import iso8601_utc\n+from app.timeutil import iso8601_utc, to_utc_naive\n \n router = APIRouter(prefix=\"/events\", tags=[\"events\"])\n \n@@ -78,7 +78,7 @@\n     event = Event(\n         title=payload.title,\n         description=payload.description,\n-        starts_at=payload.starts_at.replace(tzinfo=None),\n+        starts_at=to_utc_naive(payload.starts_at),\n         capacity=payload.capacity,\n         price=money.quantize(payload.price, payload.currency),\n         currency=payload.currency,\n--- a/visible_tests/issue-03/test_issue_examples.py\n+++ b/visible_tests/issue-03/test_issue_examples.py\n@@ -0,0 +1,46 @@\n+\"\"\"Test the exact examples from the issue description.\"\"\"\n+from __future__ import annotations\n+\n+\n+async def test_issue_example_plus_0200(client, auth_headers, tokens):\n+    # Test the exact example from the issue: POST /events with start_time = \"2023-01-01T10:00:00+02:00\"\n+    r = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"Test Event\",\n+            \"starts_at\": \"2023-01-01T10:00:00+02:00\",\n+            \"capacity\": 5,\n+            \"price\": \"10.00\",\n+        },\n+    )\n+    assert r.status_code == 201\n+    \n+    event_id = r.json()[\"id\"]\n+    \n+    # GET /events/{id} should return start_time = \"2023-01-01T08:00:00Z\"\n+    got = await client.get(f\"/events/{event_id}\")\n+    assert got.status_code == 200\n+    assert got.json()[\"starts_at\"] == \"2023-01-01T08:00:00+00:00\"\n+\n+\n+async def test_issue_example_utc(client, auth_headers, tokens):\n+    # Test the exact example from the issue: POST /events with start_time = \"2023-01-01T10:00:00Z\"\n+    r = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"UTC Event\",\n+            \"starts_at\": \"2023-01-01T10:00:00Z\",\n+            \"capacity\": 5,\n+            \"price\": \"10.00\",\n+        },\n+    )\n+    assert r.status_code == 201\n+    \n+    event_id = r.json()[\"id\"]\n+    \n+    # GET /events/{id} should return start_time = \"2023-01-01T10:00:00Z\"\n+    got = await client.get(f\"/events/{event_id}\")\n+    assert got.status_code == 200\n+    assert got.json()[\"starts_at\"] == \"2023-01-01T10:00:00+00:00\"\n--- a/visible_tests/issue-03/test_timezone_edge_cases.py\n+++ b/visible_tests/issue-03/test_timezone_edge_cases.py\n@@ -0,0 +1,77 @@\n+\"\"\"Test edge cases for timezone handling.\"\"\"\n+from __future__ import annotations\n+\n+\n+async def test_negative_timezone_offset(client, auth_headers, tokens):\n+    # Test with -05:00 timezone offset (e.g., Eastern Time)\n+    # 2023-01-01T10:00:00-05:00 should be stored as 2023-01-01T15:00:00Z\n+    r = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"New York Meeting\",\n+            \"starts_at\": \"2023-01-01T10:00:00-05:00\",\n+            \"capacity\": 5,\n+            \"price\": \"10.00\",\n+        },\n+    )\n+    assert r.status_code == 201\n+    # The response should show the UTC equivalent (10:00 ET = 15:00 UTC)\n+    assert r.json()[\"starts_at\"] == \"2023-01-01T15:00:00+00:00\"\n+    \n+    event_id = r.json()[\"id\"]\n+    \n+    # Retrieve the event and verify it returns the UTC instant\n+    got = await client.get(f\"/events/{event_id}\")\n+    assert got.status_code == 200\n+    assert got.json()[\"starts_at\"] == \"2023-01-01T15:00:00+00:00\"\n+\n+\n+async def test_utc_with_explicit_offset(client, auth_headers, tokens):\n+    # Test with +00:00 timezone offset (explicit UTC)\n+    # 2023-01-01T10:00:00+00:00 should remain 2023-01-01T10:00:00+00:00\n+    r = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"UTC Meeting\",\n+            \"starts_at\": \"2023-01-01T10:00:00+00:00\",\n+            \"capacity\": 5,\n+            \"price\": \"10.00\",\n+        },\n+    )\n+    assert r.status_code == 201\n+    # The response should show the same UTC time\n+    assert r.json()[\"starts_at\"] == \"2023-01-01T10:00:00+00:00\"\n+    \n+    event_id = r.json()[\"id\"]\n+    \n+    # Retrieve the event and verify it returns the same UTC instant\n+    got = await client.get(f\"/events/{event_id}\")\n+    assert got.status_code == 200\n+    assert got.json()[\"starts_at\"] == \"2023-01-01T10:00:00+00:00\"\n+\n+\n+async def test_different_timezone_offsets(client, auth_headers, tokens):\n+    # Test with +08:00 timezone offset (e.g., China Standard Time)\n+    # 2023-01-01T12:00:00+08:00 should be stored as 2023-01-01T04:00:00Z\n+    r = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"Beijing Meeting\",\n+            \"starts_at\": \"2023-01-01T12:00:00+08:00\",\n+            \"capacity\": 5,\n+            \"price\": \"10.00\",\n+        },\n+    )\n+    assert r.status_code == 201\n+    # The response should show the UTC equivalent (12:00 CST = 04:00 UTC)\n+    assert r.json()[\"starts_at\"] == \"2023-01-01T04:00:00+00:00\"\n+    \n+    event_id = r.json()[\"id\"]\n+    \n+    # Retrieve the event and verify it returns the UTC instant\n+    got = await client.get(f\"/events/{event_id}\")\n+    assert got.status_code == 200\n+    assert got.json()[\"starts_at\"] == \"2023-01-01T04:00:00+00:00\"\n--- a/visible_tests/issue-03/test_timezone_offset.py\n+++ b/visible_tests/issue-03/test_timezone_offset.py\n@@ -0,0 +1,52 @@\n+\"\"\"Test timezone offset handling for event creation.\"\"\"\n+from __future__ import annotations\n+\n+\n+async def test_timezone_offset_conversion(client, auth_headers, tokens):\n+    # Test with +02:00 timezone offset\n+    # 2023-01-01T10:00:00+02:00 should be stored as 2023-01-01T08:00:00Z\n+    r = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"Meeting with timezone\",\n+            \"starts_at\": \"2023-01-01T10:00:00+02:00\",\n+            \"capacity\": 5,\n+            \"price\": \"10.00\",\n+        },\n+    )\n+    assert r.status_code == 201\n+    # The response should show the UTC equivalent\n+    assert r.json()[\"starts_at\"] == \"2023-01-01T08:00:00+00:00\"\n+    \n+    event_id = r.json()[\"id\"]\n+    \n+    # Retrieve the event and verify it returns the UTC instant\n+    got = await client.get(f\"/events/{event_id}\")\n+    assert got.status_code == 200\n+    assert got.json()[\"starts_at\"] == \"2023-01-01T08:00:00+00:00\"\n+\n+\n+async def test_utc_timezone_unchanged(client, auth_headers, tokens):\n+    # Test with UTC timezone (Z)\n+    # 2023-01-01T10:00:00Z should remain 2023-01-01T10:00:00Z\n+    r = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"UTC Meeting\",\n+            \"starts_at\": \"2023-01-01T10:00:00Z\",\n+            \"capacity\": 5,\n+            \"price\": \"10.00\",\n+        },\n+    )\n+    assert r.status_code == 201\n+    # The response should show the same UTC time\n+    assert r.json()[\"starts_at\"] == \"2023-01-01T10:00:00+00:00\"\n+    \n+    event_id = r.json()[\"id\"]\n+    \n+    # Retrieve the event and verify it returns the same UTC instant\n+    got = await client.get(f\"/events/{event_id}\")\n+    assert got.status_code == 200\n+    assert got.json()[\"starts_at\"] == \"2023-01-01T10:00:00+00:00\"\n",
+    "files_changed": [
+      "app/routes/events.py",
+      "visible_tests/issue-03/test_issue_examples.py",
+      "visible_tests/issue-03/test_timezone_edge_cases.py",
+      "visible_tests/issue-03/test_timezone_offset.py"
+    ],
+    "lines_added": 177,
+    "lines_removed": 2,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; Fixed timezone conversion issue in event creation by replacing `payload.starts_at.replace(tzinfo=None)` with `to_utc_naive(payload.starts_at)` in `app/routes/events.py`. This ensures that datetime inputs with timezone offsets are properly converted to UTC before storage. All existing tests pass, and new tests confirm correct handling of various timezone offsets including the specific examples from the issue description."
+  },
+  "verifier_test": null,
+  "validity": null,
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_events.py",
+    "passed": true,
+    "total": 2,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.065,
+    "stdout_tail": "..                                                                       [100%]\n2 passed in 0.04s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-03-v42lr9r_/issue-03-judge/.junit/visible.xml"
+  },
+  "verifier": null,
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 1,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.109,
+    "stdout_tail": ".                                                                        [100%]\n1 passed in 0.04s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-03-v42lr9r_/issue-03-judge/.junit/gold.xml"
+  },
+  "mutation": [],
+  "decision": "REVIEW REQUIRED",
+  "runtime_sec": 274.936,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-03-baseline"
+}

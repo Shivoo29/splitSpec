@@ -1,0 +1,25 @@
+case_id: issue-06
+summary: A cancellation request for a registration that the requester does not own
+  must be rejected and must not alter the registration.
+invariants:
+- The system must verify that the authenticated user owns the registration identified
+  in a cancellation request before performing any state change.
+- If the user does not own the registration, the cancellation request must be rejected
+  and the registration's state must remain unchanged.
+inputs:
+- Authenticated cancellation request targeting a registration ID that belongs to a
+  different user.
+expected_outputs:
+- An error response indicating lack of ownership (e.g., HTTP 403 Forbidden or equivalent).
+- The registration record remains in its prior state (e.g., still marked as active,
+  no refunds issued, no audit log indicating cancellation).
+out_of_scope:
+- Cancellation of registrations owned by the requester.
+- Behavior of admin or privileged roles that may be allowed to cancel any registration.
+- "Creation, payment, or other non\u2011cancellation endpoints."
+ambiguities:
+- Exact HTTP status code or error payload that should be returned on ownership failure.
+- Whether there are any roles (e.g., admin) that are permitted to cancel registrations
+  they do not own.
+- "Specific audit\u2011logging requirements for rejected cancellation attempts."
+confidence: high

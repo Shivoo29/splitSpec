@@ -1,0 +1,152 @@
+{
+  "case_id": "issue-09",
+  "mode": "splitspec",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "verifier",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-3.1-flash-lite",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-09",
+    "summary": "A newly created event is sometimes missing from the events listing until a later point, such as after a redeployment.",
+    "invariants": [],
+    "inputs": [],
+    "expected_outputs": [],
+    "out_of_scope": [
+      "Deployment processes, UI rendering performance, unrelated API endpoints, and any external caching layers not directly tied to the events listing."
+    ],
+    "ambiguities": [
+      "How the event is created (API endpoint, request payload, authentication).",
+      "The exact timing between event creation and the request for the events list.",
+      "Whether any caching (in‑memory, Redis, CDN) is involved for the events list.",
+      "Database transaction semantics or eventual consistency guarantees.",
+      "Environment details (development vs production, single vs multiple instances).",
+      "Reproducibility steps: no deterministic steps are provided to reliably trigger the issue."
+    ],
+    "confidence": "low"
+  },
+  "patch": {
+    "case_id": "issue-09",
+    "diff": "--- a/app/routes/events.py\n+++ b/app/routes/events.py\n@@ -87,6 +87,8 @@\n     )\n     session.add(event)\n     session.commit()\n+    # Invalidate cache to ensure new event appears in list immediately\n+    request.app.state.cache.invalidate()\n     return event_payload(event)\n \n \n--- a/visible_tests/issue-09/test_comprehensive_cache.py\n+++ b/visible_tests/issue-09/test_comprehensive_cache.py\n@@ -0,0 +1,77 @@\n+\"\"\"Comprehensive test for cache invalidation scenarios.\"\"\"\n+from __future__ import annotations\n+\n+\n+async def test_multiple_events_cache_invalidation(client, auth_headers, tokens):\n+    \"\"\"Test that creating multiple events in sequence all appear in the list.\"\"\"\n+    events_data = [\n+        {\n+            \"title\": f\"Event {i}\",\n+            \"starts_at\": \"2026-09-01T18:00:00+00:00\",\n+            \"capacity\": 40,\n+            \"price\": \"25.00\",\n+            \"currency\": \"USD\",\n+        }\n+        for i in range(3)\n+    ]\n+    \n+    # Get initial count\n+    initial_response = await client.get(\"/events\")\n+    initial_count = len(initial_response.json()[\"items\"])\n+    \n+    event_ids = []\n+    \n+    # Create multiple events\n+    for event_data in events_data:\n+        create_response = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=event_data)\n+        assert create_response.status_code == 201\n+        event_ids.append(create_response.json()[\"id\"])\n+        \n+        # After each creation, the list should include all created events\n+        list_response = await client.get(\"/events\")\n+        assert list_response.status_code == 200\n+        current_ids = [item[\"id\"] for item in list_response.json()[\"items\"]]\n+        \n+        # Verify all created events are present\n+        for created_id in event_ids:\n+            assert created_id in current_ids, f\"Event {created_id} not found in list\"\n+    \n+    # Final verification\n+    final_response = await client.get(\"/events\")\n+    final_count = len(final_response.json()[\"items\"])\n+    assert final_count == initial_count + len(events_data), \\\n+        f\"Expected {initial_count + len(events_data)} events, got {final_count}\"\n+\n+\n+async def test_cache_invalidation_with_different_params(client, auth_headers, tokens):\n+    \"\"\"Test that cache invalidation works with different limit/offset parameters.\"\"\"\n+    new_event = {\n+        \"title\": \"Paginated Event\",\n+        \"starts_at\": \"2026-09-01T18:00:00+00:00\",\n+        \"capacity\": 40,\n+        \"price\": \"25.00\",\n+        \"currency\": \"USD\",\n+    }\n+    \n+    # Create event\n+    create_response = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=new_event)\n+    assert create_response.status_code == 201\n+    event_id = create_response.json()[\"id\"]\n+    \n+    # Test with default parameters\n+    list_response1 = await client.get(\"/events\")\n+    assert list_response1.status_code == 200\n+    ids1 = [item[\"id\"] for item in list_response1.json()[\"items\"]]\n+    assert event_id in ids1\n+    \n+    # Test with explicit limit\n+    list_response2 = await client.get(\"/events?limit=5\")\n+    assert list_response2.status_code == 200\n+    ids2 = [item[\"id\"] for item in list_response2.json()[\"items\"]]\n+    assert event_id in ids2\n+    \n+    # Test with offset\n+    list_response3 = await client.get(\"/events?offset=0\")\n+    assert list_response3.status_code == 200\n+    ids3 = [item[\"id\"] for item in list_response3.json()[\"items\"]]\n+    assert event_id in ids3\n--- a/visible_tests/issue-09/test_event_list_cache.py\n+++ b/visible_tests/issue-09/test_event_list_cache.py\n@@ -0,0 +1,26 @@\n+\"\"\"Test that newly created events appear in the list immediately.\"\"\"\n+from __future__ import annotations\n+\n+\n+async def test_newly_created_event_appears_in_list(client, auth_headers, tokens):\n+    \"\"\"Test that a newly created event appears in the list immediately after creation.\"\"\"\n+    new_event = {\n+        \"title\": \"New Event\",\n+        \"starts_at\": \"2026-09-01T18:00:00+00:00\",\n+        \"capacity\": 40,\n+        \"price\": \"25.00\",\n+        \"currency\": \"USD\",\n+    }\n+    \n+    # Create a new event\n+    create_response = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=new_event)\n+    assert create_response.status_code == 201\n+    event_id = create_response.json()[\"id\"]\n+    \n+    # Immediately fetch the event list\n+    list_response = await client.get(\"/events\")\n+    assert list_response.status_code == 200\n+    \n+    # Check that the newly created event is in the list\n+    event_ids = [item[\"id\"] for item in list_response.json()[\"items\"]]\n+    assert event_id in event_ids, f\"Newly created event {event_id} not found in event list\"\n--- a/visible_tests/issue-09/test_event_list_cache_invalidation.py\n+++ b/visible_tests/issue-09/test_event_list_cache_invalidation.py\n@@ -0,0 +1,34 @@\n+\"\"\"Test that cache invalidation works correctly when creating events.\"\"\"\n+from __future__ import annotations\n+\n+\n+async def test_event_list_cache_invalidation_on_create(client, auth_headers, tokens):\n+    \"\"\"Test that the event list cache is invalidated when a new event is created.\"\"\"\n+    new_event = {\n+        \"title\": \"Cached Event\",\n+        \"starts_at\": \"2026-09-01T18:00:00+00:00\",\n+        \"capacity\": 40,\n+        \"price\": \"25.00\",\n+        \"currency\": \"USD\",\n+    }\n+    \n+    # First, get the event list to populate the cache\n+    list_response1 = await client.get(\"/events\")\n+    assert list_response1.status_code == 200\n+    initial_count = len(list_response1.json()[\"items\"])\n+    \n+    # Create a new event\n+    create_response = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=new_event)\n+    assert create_response.status_code == 201\n+    event_id = create_response.json()[\"id\"]\n+    \n+    # Get the event list again - it should include the new event\n+    list_response2 = await client.get(\"/events\")\n+    assert list_response2.status_code == 200\n+    \n+    # Check that the count increased and the new event is present\n+    assert len(list_response2.json()[\"items\"]) == initial_count + 1, \\\n+        f\"Event count did not increase: {initial_count} -> {len(list_response2.json()['items'])}\"\n+    \n+    event_ids = [item[\"id\"] for item in list_response2.json()[\"items\"]]\n+    assert event_id in event_ids, f\"Newly created event {event_id} not found in event list\"\n",
+    "files_changed": [
+      "app/routes/events.py",
+      "visible_tests/issue-09/test_comprehensive_cache.py",
+      "visible_tests/issue-09/test_event_list_cache.py",
+      "visible_tests/issue-09/test_event_list_cache_invalidation.py"
+    ],
+    "lines_added": 139,
+    "lines_removed": 0,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; ## Summary **Problem Identified**: Newly created events were not appearing in the event list due to a caching issue. The event list was cached but the cache was not being invalidated when new events were created. **Root Cause**: In `app/routes/events.py`, the `create_event` function was creating events and committing them to the database, but it wasn't calling `request.app.state.cache.invalidate()` to clear the cached event list. **Solution**: Added a single line `request.app.state.cache.invalidate()` in the `create_event` function after `session.commit()` to ensure the cache is cleared when n... [truncated, 1357 chars; full reply in trajectory.jsonl]"
+  },
+  "verifier_test": {
+    "case_id": "issue-09",
+    "filename": "test_issue_09_repro.py",
+    "contents": "import pytest\nfrom httpx import AsyncClient\n\n@pytest.mark.asyncio\nasync def test_event_list_consistency_after_create(client, auth_headers, tokens):\n    # 1. Create an event\n    new_event = {\n        \"title\": \"Consistent Event\",\n        \"starts_at\": \"2026-10-01T18:00:00+00:00\",\n        \"capacity\": 50,\n        \"price\": \"10.00\",\n        \"currency\": \"USD\",\n    }\n    \n    r = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=new_event)\n    assert r.status_code == 201\n    created_id = r.json()[\"id\"]\n    \n    # 2. Immediately fetch the list\n    r = await client.get(\"/events\")\n    assert r.status_code == 200\n    events = r.json()[\"items\"]\n    ids = [e[\"id\"] for e in events]\n    \n    # Invariant: The newly created event should appear in the event list immediately.\n    assert created_id in ids, f\"Event {created_id} not found in event list {ids}\"\n",
+    "run_command": "pytest test_issue_09_repro.py",
+    "invariant": "Any successfully created event must be immediately visible in the events listing endpoint.",
+    "assumptions": [
+      "The API endpoint '/events' does not intentionally employ a delay or eventual consistency mechanism that would naturally cause a newly created item to be missing.",
+      "The 'events' listing does not perform complex filtering that would exclude the newly created event (e.g., date filtering).",
+      "The application environment used for testing does not have an external persistent cache (like Redis) that requires manual invalidation that the test cannot control."
+    ],
+    "confidence": "high",
+    "frozen_sha256": "e562c0a7e6f8c442e48e3a099b8986deae1ad05b1094a0460c66d1540de1ce90"
+  },
+  "validity": {
+    "compiles": true,
+    "runs": true,
+    "fails_on_original_bug": false,
+    "passed": false,
+    "reason": "test passed on buggy code (0 failed, 0 errors), so it is not discriminating"
+  },
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_events.py",
+    "passed": true,
+    "total": 3,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.118,
+    "stdout_tail": "...                                                                      [100%]\n3 passed in 0.05s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-09-07i3xf5z/issue-09-judge/.junit/visible.xml"
+  },
+  "verifier": null,
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 3,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.139,
+    "stdout_tail": "...                                                                      [100%]\n3 passed in 0.07s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-09-07i3xf5z/issue-09-judge/.junit/gold.xml"
+  },
+  "mutation": [
+    {
+      "mutant_id": "m01-original-bug",
+      "description": "the seeded defect unchanged, no invalidation on event creation",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m02-obvious-path-only",
+      "description": "invalidates only the single-event cache key, leaving every list page stale",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m03-right-value-wrong-state",
+      "description": "returns a fresh payload from the write path but never clears the cache",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m04-weakens-the-test",
+      "description": "disables the cache read entirely instead of invalidating on write",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    }
+  ],
+  "decision": "ESCALATE",
+  "runtime_sec": 331.039,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-09-splitspec"
+}

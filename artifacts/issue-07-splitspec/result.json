@@ -1,0 +1,6 @@
+{
+  "case_id": "issue-07",
+  "mode": "splitspec",
+  "ok": false,
+  "error": "The read operation timed out"
+}

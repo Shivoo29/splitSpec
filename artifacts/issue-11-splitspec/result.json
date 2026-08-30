@@ -1,0 +1,137 @@
+{
+  "case_id": "issue-11",
+  "mode": "splitspec",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "verifier",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-3.1-flash-lite",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-11",
+    "summary": "Registrations are reported as occasionally disappearing from user accounts, but the problem cannot be reliably reproduced or identified.",
+    "invariants": [],
+    "inputs": [],
+    "expected_outputs": [],
+    "out_of_scope": [],
+    "ambiguities": [
+      "No specific account identifier or registration ID is provided.",
+      "No timestamp or timeframe of when the disappearance was observed.",
+      "No reproducible steps or conditions that trigger the issue.",
+      "Unclear whether the problem occurs in the web UI, mobile app, email confirmations, or backend API.",
+      "Environment details (development, staging, production) are missing.",
+      "No logs, error messages, or stack traces are supplied."
+    ],
+    "confidence": "low"
+  },
+  "patch": {
+    "case_id": "issue-11",
+    "diff": "",
+    "files_changed": [],
+    "lines_added": 0,
+    "lines_removed": 0,
+    "touched_tests": false,
+    "notes": "stop_reason=length; Good, the type annotation is correct: `event: Mapped[Event]`. I must have misread it earlier. Let me think about this issue one more time. The problem is that registrations \"occasionally disappear\". This is a rare and intermittent issue that cannot be reliably reproduced. One possibility is that there's a race condition in the database. For example, if two transactions try to update the same registration at the same time, one of them might fail or roll back. But looking at the code, I don't see any obvious race conditions. The code uses SQLAlchemy's default transaction management, which should... [truncated, 35907 chars; full reply in trajectory.jsonl]"
+  },
+  "verifier_test": {
+    "case_id": "issue-11",
+    "filename": "test_issue_11_final.py",
+    "contents": "import pytest\nfrom app.models import Registration\nfrom sqlalchemy import select\n\n@pytest.mark.asyncio\nasync def test_disappearing_registration_race(client, auth_headers, tokens, app):\n    headers = auth_headers(tokens['bob'])\n    \n    # Register for event 2\n    r1 = await client.post('/registrations', json={'event_id': 2}, headers=headers)\n    assert r1.status_code == 201\n    reg_id = r1.json()['id']\n    \n    # Immediately cancel, then register, then check.\n    await client.delete(f'/registrations/{reg_id}', headers=headers)\n    \n    # Register again\n    r2 = await client.post('/registrations', json={'event_id': 2}, headers=headers)\n    assert r2.status_code == 201\n    new_reg_id = r2.json()['id']\n    \n    # Check DB directly\n    with app.state.sessionmaker() as db_session:\n        db_reg = db_session.scalar(select(Registration).where(Registration.id == new_reg_id))\n        assert db_reg is not None, 'Registration should exist in DB'\n        assert db_reg.status == 'confirmed'\n    \n    # List through API\n    mine = await client.get('/registrations', headers=headers)\n    ids = [x['id'] for x in mine.json()]\n    assert new_reg_id in ids, f'Registration {new_reg_id} not found in API response. Got: {ids}'",
+    "run_command": "pytest test_issue_11_final.py",
+    "invariant": "Registrations, once created or re-activated (following cancellation), must be immediately visible in the user's registration list.",
+    "assumptions": [
+      "The API should consistently return all confirmed or cancelled registrations associated with the user.",
+      "Database transactions are correctly committed and visible after the API call returns."
+    ],
+    "confidence": "low",
+    "frozen_sha256": "1dd8c4c148bdd2a03ad5315054f0a5302ce58c128f8f71e7f7a69be6954cfee9"
+  },
+  "validity": {
+    "compiles": null,
+    "runs": null,
+    "fails_on_original_bug": null,
+    "passed": false,
+    "reason": "no buggy variant: case has no seeded bug for the test to catch"
+  },
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_registrations.py",
+    "passed": true,
+    "total": 3,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.114,
+    "stdout_tail": "...                                                                      [100%]\n3 passed in 0.07s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-11-1z89oaix/issue-11-judge/.junit/visible.xml"
+  },
+  "verifier": null,
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 4,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.13,
+    "stdout_tail": "....                                                                     [100%]\n4 passed in 0.09s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-11-1z89oaix/issue-11-judge/.junit/gold.xml"
+  },
+  "mutation": [
+    {
+      "mutant_id": "m01-hard-deletes-on-cancel",
+      "description": "guesses that cancel should delete the row, which loses history",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m02-hides-cancelled-from-list",
+      "description": "guesses the report meant cancelled rows should be hidden from the list",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m03-auto-reconfirms",
+      "description": "guesses registrations should be restored automatically, weakening cancel",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    }
+  ],
+  "decision": "ESCALATE",
+  "runtime_sec": 523.466,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-11-splitspec"
+}

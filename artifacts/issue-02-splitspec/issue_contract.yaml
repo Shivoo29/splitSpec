@@ -1,0 +1,40 @@
+case_id: issue-02
+summary: Paging through the event list returns overlapping records and an inconsistent
+  order compared to retrieving the full list in one request.
+invariants:
+- For a given deterministic ordering of events, the sequence of records returned by
+  successive pages (using the same limit and offset/skip semantics) must be a partition
+  of the full ordered list with no gaps and no overlaps.
+- The concatenation of all pages, when ordered by the pagination parameters, must
+  be identical (both in content and order) to the result of a single request that
+  retrieves the entire list without pagination.
+inputs:
+- "A request to the event\u2011listing endpoint with explicit pagination parameters\
+  \ (e.g., `limit` and `offset` or `page` and `page_size`)."
+- A request to the same endpoint without pagination (or with a limit large enough
+  to return all events).
+- "Any combination of filters that do not affect ordering (e.g., date range, status)\
+  \ applied consistently to both paginated and non\u2011paginated requests."
+expected_outputs:
+- Each paginated response contains at most `limit` events, sorted according to the
+  defined ordering criteria.
+- No event appears in more than one page for a given pagination sequence.
+- The ordered list obtained by concatenating all paginated pages exactly matches the
+  ordered list returned by the single full fetch.
+- The total count reported (if any) is consistent between paginated and full responses.
+out_of_scope:
+- How the ordering is implemented internally (e.g., database `ORDER BY` clause).
+- Performance optimisations, caching behavior, or database indexing.
+- "Error handling for invalid pagination parameters (negative values, non\u2011numeric\
+  \ input)."
+- Behavior when filters change the underlying dataset between page requests.
+ambiguities:
+- "The exact pagination scheme used by the API (offset\u2011based vs. page\u2011number\u2011\
+  based) is not specified."
+- The field(s) that define the deterministic ordering of events (e.g., start time,
+  creation timestamp, ID) are not documented.
+- "Whether the API includes a total count or next\u2011page token in the response,\
+  \ and how that should be validated."
+- How the endpoint behaves when the dataset changes between page requests (e.g., new
+  events added).
+confidence: medium

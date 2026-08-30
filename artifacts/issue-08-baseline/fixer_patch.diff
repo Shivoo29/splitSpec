@@ -1,0 +1,120 @@
+--- a/app/routes/payments.py
++++ b/app/routes/payments.py
+@@ -63,6 +63,16 @@
+     if currency != event.currency:
+         raise HTTPException(status_code=400, detail="charge currency must match the event currency")
+ 
++    # Check for existing payment with the same idempotency key BEFORE creating a new one
++    existing = session.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))
++    if existing is not None:
++        if existing.user_id != user.id:
++            raise HTTPException(
++                status_code=409, detail="idempotency key belongs to another user"
++            ) from None
++        response.status_code = 200
++        return payment_payload(existing)
++
+     payment = Payment(
+         user_id=user.id,
+         event_id=event.id,
+@@ -77,6 +87,7 @@
+         session.commit()
+     except IntegrityError:
+         session.rollback()
++        # Another request may have created the payment while we were processing
+         existing = session.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))
+         if existing is not None:
+             if existing.user_id != user.id:
+@@ -87,10 +98,5 @@
+             return payment_payload(existing)
+         raise HTTPException(status_code=409, detail="idempotency key already in use") from None
+ 
+-    existing = session.scalar(select(Payment).where(Payment.idempotency_key == idempotency_key))
+-    if existing is not None and existing.id != payment.id:
+-        # Another payment with the same key exists - but we already created ours!
+-        pass  # Don't raise, just return the new payment (wrong behavior)
+-
+     response.status_code = 201
+     return payment_payload(payment)
+--- a/cleanup.py
++++ b/cleanup.py
+@@ -0,0 +1,4 @@
++import os
++os.remove("test_idempotency_fix.py")
++os.remove("test_race_condition.py")
++print("Cleanup complete")
+--- a/test_idempotency_fix.py
++++ b/test_idempotency_fix.py
+@@ -0,0 +1,49 @@
++"""Test to verify the idempotency fix works correctly."""
++import pytest
++from httpx import AsyncClient
++
++
++async def test_idempotency_prevents_duplicates(client, auth_headers, tokens):
++    """Test that multiple requests with the same idempotency key don't create duplicate payments."""
++    headers = {**auth_headers(tokens["alice"]), "Idempotency-Key": "test-duplicate-key"}
++    
++    # First request - should create a payment
++    first_response = await client.post("/payments", headers=headers, json={"event_id": 1})
++    assert first_response.status_code == 201
++    first_payment = first_response.json()
++    
++    # Second request with same key - should return the same payment
++    second_response = await client.post("/payments", headers=headers, json={"event_id": 1})
++    assert second_response.status_code == 200
++    second_payment = second_response.json()
++    
++    # Verify they are the same payment
++    assert first_payment["id"] == second_payment["id"]
++    assert first_payment["amount"] == second_payment["amount"]
++    assert first_payment["currency"] == second_payment["currency"]
++    assert first_payment["status"] == second_payment["status"]
++    
++    # Third request with same key - should also return the same payment
++    third_response = await client.post("/payments", headers=headers, json={"event_id": 1})
++    assert third_response.status_code == 200
++    third_payment = third_response.json()
++    
++    assert first_payment["id"] == third_payment["id"]
++
++
++async def test_idempotency_with_different_users(client, auth_headers, tokens):
++    """Test that idempotency key from one user cannot be used by another user."""
++    headers_alice = {**auth_headers(tokens["alice"]), "Idempotency-Key": "test-user-key"}
++    
++    # Alice creates a payment
++    alice_response = await client.post("/payments", headers=headers_alice, json={"event_id": 1})
++    assert alice_response.status_code == 201
++    
++    # Bob tries to use the same key - should fail
++    headers_bob = {**auth_headers(tokens["bob"]), "Idempotency-Key": "test-user-key"}
++    bob_response = await client.post("/payments", headers=headers_bob, json={"event_id": 1})
++    assert bob_response.status_code == 409
++
++
++if __name__ == "__main__":
++    pytest.main([__file__, "-v"])
+--- a/test_race_condition.py
++++ b/test_race_condition.py
+@@ -0,0 +1,20 @@
++"""Test to demonstrate the race condition in idempotency key handling."""
++import asyncio
++from httpx import AsyncClient
++
++
++async def test_concurrent_requests_create_duplicate_payments():
++    """Test that concurrent requests with the same idempotency key don't create duplicates."""
++    # This test simulates what happens when a client times out and retries
++    # Both requests should return the same payment, not create two
++    
++    # Note: This is a simplified test. In a real scenario, you'd need to
++    # actually simulate concurrent execution to trigger the race condition.
++    pass
++
++
++if __name__ == "__main__":
++    print("This test demonstrates the race condition issue.")
++    print("The bug is in payments.py where it doesn't properly handle")
++    print("the case where two requests with the same idempotency key")
++    print("are processed concurrently.")

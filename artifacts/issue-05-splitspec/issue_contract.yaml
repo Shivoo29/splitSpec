@@ -1,0 +1,17 @@
+case_id: issue-05
+summary: The ticket retrieval endpoint must restrict access to the ticket owner and
+  must not disclose ticket details to other authenticated users.
+invariants:
+- When an authenticated user requests a ticket that they do not own, the API must
+  not return the ticket's details.
+inputs:
+- Authenticated GET request to the ticket endpoint (e.g., /tickets/{ticket_id}) where
+  the ticket_id belongs to a different user than the requester.
+expected_outputs:
+- The response must be an error status (e.g., 403 Forbidden or 404 Not Found) and
+  must not contain any ticket detail fields.
+out_of_scope:
+- Ticket creation, updating, deletion, payment processing, barcode generation, and
+  any behavior of other routes.
+ambiguities: []
+confidence: high

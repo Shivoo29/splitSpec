@@ -1,0 +1,170 @@
+{
+  "case_id": "issue-03",
+  "mode": "splitspec",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "verifier",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-3.1-flash-lite",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-03",
+    "summary": "When an event is created with a start time that includes a non‑zero timezone offset, the API returns a start time that does not reflect the original offset, causing a two‑hour shift.",
+    "invariants": [
+      "If an event is created with a start_time that includes a non‑zero offset (e.g., '+02:00'), the timestamp returned by the API for that event must represent the same absolute point in time as the value supplied (i.e., the offset must be honoured in storage and retrieval).",
+      "The API must not reinterpret a timestamp with a non‑zero offset as if it were UTC; the returned value must either preserve the original offset or, if normalised to UTC, reflect the correct UTC equivalent."
+    ],
+    "inputs": [
+      "POST /events (or equivalent) with a JSON body containing start_time = '2023-09-01T10:00:00+02:00' (or any ISO‑8601 timestamp with a non‑zero offset).",
+      "GET /events/{id} (or equivalent) to retrieve the previously created event."
+    ],
+    "expected_outputs": [
+      "The GET response includes start_time that, when parsed as an ISO‑8601 timestamp, corresponds to the same instant as the originally supplied value (e.g., returned as '2023-09-01T08:00:00Z' or as the original '2023-09-01T10:00:00+02:00').",
+      "No two‑hour discrepancy appears between the organizer‑entered time and the time shown by the API."
+    ],
+    "out_of_scope": [
+      "Client‑side rendering of the time on web pages.",
+      "Handling of other event fields unrelated to start_time.",
+      "Support for time zones other than UTC and the supplied offset beyond correct conversion."
+    ],
+    "ambiguities": [
+      "The exact endpoint URLs, HTTP methods, and request/response payload schemas are not provided.",
+      "It is unclear whether the API is expected to return timestamps in UTC or preserve the original offset; the contract only requires that the absolute instant be correct.",
+      "The database schema and whether timestamps are stored as naive or timezone‑aware datetime objects are unspecified."
+    ],
+    "confidence": "medium"
+  },
+  "patch": {
+    "case_id": "issue-03",
+    "diff": "--- a/app/routes/events.py\n+++ b/app/routes/events.py\n@@ -13,7 +13,7 @@\n from app.auth import get_current_user\n from app.db import get_session\n from app.models import Event, User\n-from app.timeutil import iso8601_utc\n+from app.timeutil import iso8601_utc, to_utc_naive\n \n router = APIRouter(prefix=\"/events\", tags=[\"events\"])\n \n@@ -78,7 +78,7 @@\n     event = Event(\n         title=payload.title,\n         description=payload.description,\n-        starts_at=payload.starts_at.replace(tzinfo=None),\n+        starts_at=to_utc_naive(payload.starts_at),\n         capacity=payload.capacity,\n         price=money.quantize(payload.price, payload.currency),\n         currency=payload.currency,\n--- a/test_comprehensive_timezone.py\n+++ b/test_comprehensive_timezone.py\n@@ -0,0 +1,48 @@\n+\"\"\"Comprehensive timezone tests.\"\"\"\n+import pytest\n+from datetime import datetime, timezone\n+\n+\n+@pytest.mark.parametrize(\"input_timestamp,expected_utc\", [\n+    (\"2023-09-01T10:00:00+02:00\", \"2023-09-01T08:00:00+00:00\"),  # +2 hours\n+    (\"2023-09-01T10:00:00-05:00\", \"2023-09-01T15:00:00+00:00\"),  # -5 hours\n+    (\"2023-09-01T10:00:00Z\", \"2023-09-01T10:00:00+00:00\"),  # UTC\n+    (\"2023-09-01T10:00:00+00:00\", \"2023-09-01T10:00:00+00:00\"),  # UTC with offset\n+])\n+async def test_various_timezones(client, auth_headers, tokens, input_timestamp, expected_utc):\n+    \"\"\"Test that various timezone offsets are correctly converted to UTC.\"\"\"\n+    r = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"Test Event\",\n+            \"starts_at\": input_timestamp,\n+            \"capacity\": 5,\n+            \"price\": \"10.00\",\n+        },\n+    )\n+    assert r.status_code == 201\n+    \n+    returned_timestamp = r.json()[\"starts_at\"]\n+    print(f\"Input: {input_timestamp}, Returned: {returned_timestamp}, Expected: {expected_utc}\")\n+    \n+    # The returned timestamp should be the UTC equivalent\n+    assert returned_timestamp == expected_utc\n+    \n+    # Also verify by parsing and comparing\n+    original = datetime.fromisoformat(input_timestamp)\n+    returned = datetime.fromisoformat(returned_timestamp)\n+    expected = datetime.fromisoformat(expected_utc)\n+    \n+    assert original.astimezone(timezone.utc) == returned.astimezone(timezone.utc)\n+    assert returned.astimezone(timezone.utc) == expected.astimezone(timezone.utc)\n+    \n+    # Check GET endpoint too\n+    event_id = r.json()[\"id\"]\n+    got = await client.get(f\"/events/{event_id}\")\n+    assert got.status_code == 200\n+    assert got.json()[\"starts_at\"] == expected_utc\n+\n+\n+if __name__ == \"__main__\":\n+    pytest.main([__file__, \"-v\", \"-s\"])\n--- a/test_issue_fix.py\n+++ b/test_issue_fix.py\n@@ -0,0 +1,54 @@\n+\"\"\"Test to verify the exact issue described is fixed.\"\"\"\n+import pytest\n+from datetime import datetime, timezone\n+\n+\n+async def test_issue_03_exact_scenario(client, auth_headers, tokens):\n+    \"\"\"\n+    Test the exact scenario from issue-03:\n+    When an event is created with a start time that includes a non-zero timezone offset,\n+    the API returns a start time that does not reflect the original offset, causing a two-hour shift.\n+    \"\"\"\n+    # Create event with +02:00 offset (10:00 AM in timezone with +2 hours from UTC)\n+    # This should represent 8:00 AM UTC\n+    r = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"Morning Standup\",\n+            \"starts_at\": \"2023-09-01T10:00:00+02:00\",\n+            \"capacity\": 5,\n+            \"price\": \"10.00\",\n+        },\n+    )\n+    assert r.status_code == 201\n+    \n+    # The returned timestamp should represent the same instant in time\n+    # It should be 08:00:00Z (UTC), not 10:00:00+00:00 (which would be a 2-hour shift)\n+    returned_timestamp = r.json()[\"starts_at\"]\n+    \n+    # Verify it's the correct UTC time\n+    assert returned_timestamp == \"2023-09-01T08:00:00+00:00\"\n+    \n+    # Also verify by parsing\n+    original = datetime.fromisoformat(\"2023-09-01T10:00:00+02:00\")\n+    returned = datetime.fromisoformat(returned_timestamp)\n+    \n+    # Both should represent the same instant in time (8:00 UTC)\n+    assert original.astimezone(timezone.utc) == returned.astimezone(timezone.utc)\n+    assert original.astimezone(timezone.utc) == datetime(2023, 9, 1, 8, 0, tzinfo=timezone.utc)\n+    \n+    # Verify no two-hour discrepancy\n+    event_id = r.json()[\"id\"]\n+    got = await client.get(f\"/events/{event_id}\")\n+    assert got.status_code == 200\n+    retrieved_timestamp = got.json()[\"starts_at\"]\n+    \n+    # Should still be 08:00:00Z, not 10:00:00+00:00\n+    assert retrieved_timestamp == \"2023-09-01T08:00:00+00:00\"\n+    \n+    print(\"✓ Issue-03 fixed: No two-hour shift when using non-zero timezone offset\")\n+\n+\n+if __name__ == \"__main__\":\n+    pytest.main([__file__, \"-v\", \"-s\"])\n--- a/test_timezone_issue.py\n+++ b/test_timezone_issue.py\n@@ -0,0 +1,50 @@\n+\"\"\"Test to reproduce the timezone offset issue.\"\"\"\n+import pytest\n+from datetime import datetime, timezone\n+\n+\n+async def test_nonzero_offset_roundtrips(client, auth_headers, tokens):\n+    \"\"\"Test that a timestamp with a non-zero offset is correctly stored and retrieved.\"\"\"\n+    # Create event with +02:00 offset (10:00 AM in timezone with +2 hours from UTC)\n+    r = await client.post(\n+        \"/events\",\n+        headers=auth_headers(tokens[\"alice\"]),\n+        json={\n+            \"title\": \"Morning Standup\",\n+            \"starts_at\": \"2023-09-01T10:00:00+02:00\",\n+            \"capacity\": 5,\n+            \"price\": \"10.00\",\n+        },\n+    )\n+    assert r.status_code == 201\n+    \n+    # The returned timestamp should represent the same instant in time\n+    # Either as UTC (08:00:00Z) or with the original offset (10:00:00+02:00)\n+    returned_timestamp = r.json()[\"starts_at\"]\n+    print(f\"Returned timestamp: {returned_timestamp}\")\n+    \n+    # Parse both timestamps and compare\n+    original = datetime.fromisoformat(\"2023-09-01T10:00:00+02:00\")\n+    returned = datetime.fromisoformat(returned_timestamp)\n+    \n+    print(f\"Original timestamp: {original}\")\n+    print(f\"Returned timestamp: {returned}\")\n+    \n+    # Both should represent the same instant in time\n+    # When converted to UTC, they should be equal\n+    assert original.astimezone(timezone.utc) == returned.astimezone(timezone.utc)\n+    \n+    event_id = r.json()[\"id\"]\n+    \n+    # Also check the GET endpoint\n+    got = await client.get(f\"/events/{event_id}\")\n+    assert got.status_code == 200\n+    retrieved_timestamp = got.json()[\"starts_at\"]\n+    print(f\"Retrieved timestamp: {retrieved_timestamp}\")\n+    \n+    retrieved = datetime.fromisoformat(retrieved_timestamp)\n+    assert original.astimezone(timezone.utc) == retrieved.astimezone(timezone.utc)\n+\n+\n+if __name__ == \"__main__\":\n+    pytest.main([__file__, \"-v\", \"-s\"])\n",
+    "files_changed": [
+      "app/routes/events.py",
+      "test_comprehensive_timezone.py",
+      "test_issue_fix.py",
+      "test_timezone_issue.py"
+    ],
+    "lines_added": 154,
+    "lines_removed": 2,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; Fixed timezone conversion issue (issue-03) by using the existing `to_utc_naive` utility function instead of `replace(tzinfo=None)` when storing event start times. This ensures that timestamps with non-zero timezone offsets are properly converted to UTC, eliminating the two-hour shift bug. Changed only one line in `app/routes/events.py` and added the necessary import. All existing tests pass."
+  },
+  "verifier_test": {
+    "case_id": "issue-03",
+    "filename": "test_tz_offset.py",
+    "contents": "import pytest\nfrom httpx import AsyncClient\n\n@pytest.mark.asyncio\nasync def test_event_timezone_offset_preservation(client, auth_headers, tokens):\n    # The start time is 10:00 AM with a +02:00 offset, which is 08:00 AM UTC.\n    start_time_iso = \"2023-09-01T10:00:00+02:00\"\n    \n    r = await client.post(\n        \"/events\",\n        headers=auth_headers(tokens[\"alice\"]),\n        json={\n            \"title\": \"Timezone Test\",\n            \"starts_at\": start_time_iso,\n            \"capacity\": 5,\n            \"price\": \"10.00\",\n        },\n    )\n    \n    assert r.status_code == 201\n    event_data = r.json()\n    event_id = event_data[\"id\"]\n    \n    # Retrieve the event to ensure the timestamp is stored correctly\n    got = await client.get(f\"/events/{event_id}\")\n    assert got.status_code == 200\n    returned_starts_at = got.json()[\"starts_at\"]\n    \n    # 2023-09-01T08:00:00 UTC (10:00 +02:00 = 08:00 UTC)\n    expected_utc = \"2023-09-01T08:00:00+00:00\"\n    \n    # The test confirms that the API incorrectly returns the time as 10:00:00+00:00 instead of 08:00:00+00:00\n    assert returned_starts_at == expected_utc, f\"Expected {expected_utc}, but got {returned_starts_at}\"\n",
+    "run_command": "pytest test_tz_offset.py",
+    "invariant": "The API must preserve the absolute point in time when a start_time with a timezone offset is provided. Conversion to UTC should correctly account for the offset, so that '10:00:00+02:00' becomes '08:00:00+00:00' rather than '10:00:00+00:00'.",
+    "assumptions": [
+      "The API is expected to handle ISO-8601 timestamps containing timezone offsets correctly.",
+      "The client-provided timestamp '2023-09-01T10:00:00+02:00' should be normalized to '2023-09-01T08:00:00+00:00' (or equivalent) in the storage/retrieval process.",
+      "The system supports and parses +02:00 offset in the incoming JSON."
+    ],
+    "confidence": "high",
+    "frozen_sha256": "d44325e3f99461a2a8e004a219a8bf93a58e41f034be47092f108ce95f6e5b47"
+  },
+  "validity": {
+    "compiles": true,
+    "runs": true,
+    "fails_on_original_bug": true,
+    "passed": true,
+    "reason": "test failed on the buggy code (1 failures) as expected"
+  },
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_events.py",
+    "passed": true,
+    "total": 2,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.116,
+    "stdout_tail": "..                                                                       [100%]\n2 passed in 0.05s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-03-k2xd7vyz/issue-03-judge/.junit/visible.xml"
+  },
+  "verifier": {
+    "label": "verifier",
+    "command": "pytest -q --junitxml=/workspace/.junit/verifier.xml test_tz_offset.py",
+    "passed": true,
+    "total": 1,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.105,
+    "stdout_tail": ".                                                                        [100%]\n1 passed in 0.04s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-03-k2xd7vyz/issue-03-judge/.junit/verifier.xml"
+  },
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 1,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.113,
+    "stdout_tail": ".                                                                        [100%]\n1 passed in 0.04s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-03-k2xd7vyz/issue-03-judge/.junit/gold.xml"
+  },
+  "mutation": [
+    {
+      "mutant_id": "m03-1",
+      "description": "original bug: aware timestamps are stored as wall-clock times in UTC",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m03-2",
+      "description": "create response shows the correct instant but the database stores the wall-clock time",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m03-3",
+      "description": "converts only UTC and naive inputs; non-zero offsets are still stored as wall clock",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m03-4",
+      "description": "silently weakens the visible tests while wall-clock storage remains",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ],
+  "decision": "ACCEPT",
+  "runtime_sec": 409.552,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-03-splitspec"
+}

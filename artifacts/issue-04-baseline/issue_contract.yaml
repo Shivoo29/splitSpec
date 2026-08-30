@@ -1,0 +1,31 @@
+case_id: issue-04
+summary: Amounts in currencies without fractional subunits (e.g., Japanese Yen) must
+  be represented and returned as whole numbers, without decimal places.
+invariants:
+- "When the currency of a monetary value has zero sub\u2011unit digits (e.g., JPY),\
+  \ the server must round the value to an integer number of the major unit before\
+  \ storing or returning it."
+- The string representation of such a value returned by any API must contain no decimal
+  point or fractional digits.
+inputs:
+- "A request that creates or updates a price expressed in a zero\u2011sub\u2011unit\
+  \ currency with a fractional amount (e.g., 1200.75 JPY)."
+- "A request that retrieves a price or total in a zero\u2011sub\u2011unit currency."
+expected_outputs:
+- "The stored or returned amount for the zero\u2011sub\u2011unit currency is an integer\
+  \ (e.g., 1200 instead of 1200.00 or 1200.75)."
+- "Client\u2011side calculations that sum such amounts produce the same total as the\
+  \ server\u2011side total."
+out_of_scope:
+- "Rounding behavior for currencies that have sub\u2011units (e.g., USD, EUR)."
+- Presentation formatting on the client UI beyond the numeric value returned by the
+  API.
+- Currency conversion logic.
+ambiguities:
+- "Exact rounding rule to apply for fractional inputs (e.g., round half\u2011up, floor,\
+  \ ceiling)."
+- Which API endpoints or model fields are responsible for applying the rounding (creation,
+  update, retrieval).
+- Whether the integer value should be returned as a number type or as a string without
+  a decimal point.
+confidence: medium

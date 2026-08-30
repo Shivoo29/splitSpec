@@ -1,0 +1,34 @@
+case_id: issue-03
+summary: "When an event is created with a start time that includes a non\u2011zero\
+  \ timezone offset, the API returns a start time that does not reflect the original\
+  \ offset, causing a two\u2011hour shift."
+invariants:
+- "If an event is created with a start_time that includes a non\u2011zero offset (e.g.,\
+  \ '+02:00'), the timestamp returned by the API for that event must represent the\
+  \ same absolute point in time as the value supplied (i.e., the offset must be honoured\
+  \ in storage and retrieval)."
+- "The API must not reinterpret a timestamp with a non\u2011zero offset as if it were\
+  \ UTC; the returned value must either preserve the original offset or, if normalised\
+  \ to UTC, reflect the correct UTC equivalent."
+inputs:
+- "POST /events (or equivalent) with a JSON body containing start_time = '2023-09-01T10:00:00+02:00'\
+  \ (or any ISO\u20118601 timestamp with a non\u2011zero offset)."
+- GET /events/{id} (or equivalent) to retrieve the previously created event.
+expected_outputs:
+- "The GET response includes start_time that, when parsed as an ISO\u20118601 timestamp,\
+  \ corresponds to the same instant as the originally supplied value (e.g., returned\
+  \ as '2023-09-01T08:00:00Z' or as the original '2023-09-01T10:00:00+02:00')."
+- "No two\u2011hour discrepancy appears between the organizer\u2011entered time and\
+  \ the time shown by the API."
+out_of_scope:
+- "Client\u2011side rendering of the time on web pages."
+- Handling of other event fields unrelated to start_time.
+- Support for time zones other than UTC and the supplied offset beyond correct conversion.
+ambiguities:
+- The exact endpoint URLs, HTTP methods, and request/response payload schemas are
+  not provided.
+- It is unclear whether the API is expected to return timestamps in UTC or preserve
+  the original offset; the contract only requires that the absolute instant be correct.
+- "The database schema and whether timestamps are stored as naive or timezone\u2011\
+  aware datetime objects are unspecified."
+confidence: medium

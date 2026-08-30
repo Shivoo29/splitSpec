@@ -1,0 +1,13 @@
+{
+  "case_id": "issue-09",
+  "filename": "test_issue_09_repro.py",
+  "run_command": "pytest test_issue_09_repro.py",
+  "invariant": "Any successfully created event must be immediately visible in the events listing endpoint.",
+  "assumptions": [
+    "The API endpoint '/events' does not intentionally employ a delay or eventual consistency mechanism that would naturally cause a newly created item to be missing.",
+    "The 'events' listing does not perform complex filtering that would exclude the newly created event (e.g., date filtering).",
+    "The application environment used for testing does not have an external persistent cache (like Redis) that requires manual invalidation that the test cannot control."
+  ],
+  "confidence": "high",
+  "frozen_sha256": "e562c0a7e6f8c442e48e3a099b8986deae1ad05b1094a0460c66d1540de1ce90"
+}

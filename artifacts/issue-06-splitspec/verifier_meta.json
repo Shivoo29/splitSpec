@@ -1,0 +1,13 @@
+{
+  "case_id": "issue-06",
+  "filename": "test_security.py",
+  "run_command": "pytest test_security.py",
+  "invariant": "A cancellation request for a registration must be rejected if the authenticated user is not the owner of that registration, and the registration must remain in its original state.",
+  "assumptions": [
+    "Registration ID 3 is initially owned by Alice (User ID 1) and its status is 'confirmed'.",
+    "Bob is a valid user (User ID 2) who is authenticated but does not own registration ID 3.",
+    "The system rejects non-authorized attempts with a status code other than 200 (e.g., 403)."
+  ],
+  "confidence": "high",
+  "frozen_sha256": "d27750e7f5427cdfd42de13493a6c7ef7db097d484b248de4cd611ed1ec567c7"
+}

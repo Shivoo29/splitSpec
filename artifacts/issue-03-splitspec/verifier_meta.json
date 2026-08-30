@@ -1,0 +1,13 @@
+{
+  "case_id": "issue-03",
+  "filename": "test_tz_offset.py",
+  "run_command": "pytest test_tz_offset.py",
+  "invariant": "The API must preserve the absolute point in time when a start_time with a timezone offset is provided. Conversion to UTC should correctly account for the offset, so that '10:00:00+02:00' becomes '08:00:00+00:00' rather than '10:00:00+00:00'.",
+  "assumptions": [
+    "The API is expected to handle ISO-8601 timestamps containing timezone offsets correctly.",
+    "The client-provided timestamp '2023-09-01T10:00:00+02:00' should be normalized to '2023-09-01T08:00:00+00:00' (or equivalent) in the storage/retrieval process.",
+    "The system supports and parses +02:00 offset in the incoming JSON."
+  ],
+  "confidence": "high",
+  "frozen_sha256": "d44325e3f99461a2a8e004a219a8bf93a58e41f034be47092f108ce95f6e5b47"
+}

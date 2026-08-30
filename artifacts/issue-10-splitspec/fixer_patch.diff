@@ -1,0 +1,55 @@
+--- a/app/money.py
++++ b/app/money.py
+@@ -6,7 +6,7 @@
+ """
+ from __future__ import annotations
+ 
+-from decimal import ROUND_HALF_EVEN, Decimal
++from decimal import ROUND_HALF_UP, Decimal
+ 
+ SUPPORTED = {"USD": 2, "EUR": 2, "GBP": 2, "CHF": 2, "CAD": 2, "JPY": 0}
+ 
+@@ -26,7 +26,7 @@
+ def quantize(amount: object, currency: str) -> Decimal:
+     amount = assert_amount(amount)
+     places = Decimal(10) ** -cash_places(currency)
+-    return amount.quantize(places, rounding=ROUND_HALF_EVEN)
++    return amount.quantize(places, rounding=ROUND_HALF_UP)
+ 
+ 
+ def total(amounts: list[object]) -> Decimal:
+--- a/test_half_cent_fix.py
++++ b/test_half_cent_fix.py
+@@ -0,0 +1,32 @@
++"""Test to verify the half-cent rounding fix."""
++from decimal import Decimal
++from app import money
++
++# Test cases from the issue description
++def test_issue_examples():
++    # $1.025 should round up to $1.03
++    assert money.quantize(Decimal("1.025"), "USD") == Decimal("1.03")
++    
++    # $2.135 should round up to $2.14
++    assert money.quantize(Decimal("2.135"), "USD") == Decimal("2.14")
++    
++    # $0.005 should round up to $0.01
++    assert money.quantize(Decimal("0.005"), "USD") == Decimal("0.01")
++    
++    print("All issue examples pass!")
++
++# Test that non-half-cent values still work correctly
++def test_non_half_cent_values():
++    # These should not be affected by the change
++    assert money.quantize(Decimal("1.004"), "USD") == Decimal("1.00")
++    assert money.quantize(Decimal("1.006"), "USD") == Decimal("1.01")
++    assert money.quantize(Decimal("1.015"), "USD") == Decimal("1.02")
++    assert money.quantize(Decimal("1.024"), "USD") == Decimal("1.02")
++    assert money.quantize(Decimal("1.026"), "USD") == Decimal("1.03")
++    
++    print("Non-half-cent values work correctly!")
++
++if __name__ == "__main__":
++    test_issue_examples()
++    test_non_half_cent_values()
++    print("All tests passed!")

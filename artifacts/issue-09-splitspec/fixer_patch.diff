@@ -1,0 +1,157 @@
+--- a/app/routes/events.py
++++ b/app/routes/events.py
+@@ -87,6 +87,8 @@
+     )
+     session.add(event)
+     session.commit()
++    # Invalidate cache to ensure new event appears in list immediately
++    request.app.state.cache.invalidate()
+     return event_payload(event)
+ 
+ 
+--- a/visible_tests/issue-09/test_comprehensive_cache.py
++++ b/visible_tests/issue-09/test_comprehensive_cache.py
+@@ -0,0 +1,77 @@
++"""Comprehensive test for cache invalidation scenarios."""
++from __future__ import annotations
++
++
++async def test_multiple_events_cache_invalidation(client, auth_headers, tokens):
++    """Test that creating multiple events in sequence all appear in the list."""
++    events_data = [
++        {
++            "title": f"Event {i}",
++            "starts_at": "2026-09-01T18:00:00+00:00",
++            "capacity": 40,
++            "price": "25.00",
++            "currency": "USD",
++        }
++        for i in range(3)
++    ]
++    
++    # Get initial count
++    initial_response = await client.get("/events")
++    initial_count = len(initial_response.json()["items"])
++    
++    event_ids = []
++    
++    # Create multiple events
++    for event_data in events_data:
++        create_response = await client.post("/events", headers=auth_headers(tokens["alice"]), json=event_data)
++        assert create_response.status_code == 201
++        event_ids.append(create_response.json()["id"])
++        
++        # After each creation, the list should include all created events
++        list_response = await client.get("/events")
++        assert list_response.status_code == 200
++        current_ids = [item["id"] for item in list_response.json()["items"]]
++        
++        # Verify all created events are present
++        for created_id in event_ids:
++            assert created_id in current_ids, f"Event {created_id} not found in list"
++    
++    # Final verification
++    final_response = await client.get("/events")
++    final_count = len(final_response.json()["items"])
++    assert final_count == initial_count + len(events_data), \
++        f"Expected {initial_count + len(events_data)} events, got {final_count}"
++
++
++async def test_cache_invalidation_with_different_params(client, auth_headers, tokens):
++    """Test that cache invalidation works with different limit/offset parameters."""
++    new_event = {
++        "title": "Paginated Event",
++        "starts_at": "2026-09-01T18:00:00+00:00",
++        "capacity": 40,
++        "price": "25.00",
++        "currency": "USD",
++    }
++    
++    # Create event
++    create_response = await client.post("/events", headers=auth_headers(tokens["alice"]), json=new_event)
++    assert create_response.status_code == 201
++    event_id = create_response.json()["id"]
++    
++    # Test with default parameters
++    list_response1 = await client.get("/events")
++    assert list_response1.status_code == 200
++    ids1 = [item["id"] for item in list_response1.json()["items"]]
++    assert event_id in ids1
++    
++    # Test with explicit limit
++    list_response2 = await client.get("/events?limit=5")
++    assert list_response2.status_code == 200
++    ids2 = [item["id"] for item in list_response2.json()["items"]]
++    assert event_id in ids2
++    
++    # Test with offset
++    list_response3 = await client.get("/events?offset=0")
++    assert list_response3.status_code == 200
++    ids3 = [item["id"] for item in list_response3.json()["items"]]
++    assert event_id in ids3
+--- a/visible_tests/issue-09/test_event_list_cache.py
++++ b/visible_tests/issue-09/test_event_list_cache.py
+@@ -0,0 +1,26 @@
++"""Test that newly created events appear in the list immediately."""
++from __future__ import annotations
++
++
++async def test_newly_created_event_appears_in_list(client, auth_headers, tokens):
++    """Test that a newly created event appears in the list immediately after creation."""
++    new_event = {
++        "title": "New Event",
++        "starts_at": "2026-09-01T18:00:00+00:00",
++        "capacity": 40,
++        "price": "25.00",
++        "currency": "USD",
++    }
++    
++    # Create a new event
++    create_response = await client.post("/events", headers=auth_headers(tokens["alice"]), json=new_event)
++    assert create_response.status_code == 201
++    event_id = create_response.json()["id"]
++    
++    # Immediately fetch the event list
++    list_response = await client.get("/events")
++    assert list_response.status_code == 200
++    
++    # Check that the newly created event is in the list
++    event_ids = [item["id"] for item in list_response.json()["items"]]
++    assert event_id in event_ids, f"Newly created event {event_id} not found in event list"
+--- a/visible_tests/issue-09/test_event_list_cache_invalidation.py
++++ b/visible_tests/issue-09/test_event_list_cache_invalidation.py
+@@ -0,0 +1,34 @@
++"""Test that cache invalidation works correctly when creating events."""
++from __future__ import annotations
++
++
++async def test_event_list_cache_invalidation_on_create(client, auth_headers, tokens):
++    """Test that the event list cache is invalidated when a new event is created."""
++    new_event = {
++        "title": "Cached Event",
++        "starts_at": "2026-09-01T18:00:00+00:00",
++        "capacity": 40,
++        "price": "25.00",
++        "currency": "USD",
++    }
++    
++    # First, get the event list to populate the cache
++    list_response1 = await client.get("/events")
++    assert list_response1.status_code == 200
++    initial_count = len(list_response1.json()["items"])
++    
++    # Create a new event
++    create_response = await client.post("/events", headers=auth_headers(tokens["alice"]), json=new_event)
++    assert create_response.status_code == 201
++    event_id = create_response.json()["id"]
++    
++    # Get the event list again - it should include the new event
++    list_response2 = await client.get("/events")
++    assert list_response2.status_code == 200
++    
++    # Check that the count increased and the new event is present
++    assert len(list_response2.json()["items"]) == initial_count + 1, \
++        f"Event count did not increase: {initial_count} -> {len(list_response2.json()['items'])}"
++    
++    event_ids = [item["id"] for item in list_response2.json()["items"]]
++    assert event_id in event_ids, f"Newly created event {event_id} not found in event list"

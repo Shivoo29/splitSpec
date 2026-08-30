@@ -1,0 +1,36 @@
+{
+  "score": 0.75,
+  "killed": 3,
+  "denominator": 4,
+  "excluded_unkillable": [],
+  "results": [
+    {
+      "mutant_id": "m02-1",
+      "description": "original bug: list offset is shifted by one, repeating records across pages",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m02-2",
+      "description": "partial fix: offsets are correct but every page is one row short at the tail",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m02-3",
+      "description": "returns the right rows per page but reports total one less than reality",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m02-4",
+      "description": "silently weakens the visible tests while the off-by-one pagination bug remains",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ]
+}

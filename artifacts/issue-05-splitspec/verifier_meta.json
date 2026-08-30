@@ -1,0 +1,13 @@
+{
+  "case_id": "issue-05",
+  "filename": "test_issue_05_reproduction.py",
+  "run_command": "pytest test_issue_05_reproduction.py",
+  "invariant": "When an authenticated user requests a ticket that they do not own, the API must not return the ticket's details and should return a 403 Forbidden or 404 Not Found error.",
+  "assumptions": [
+    "The test assumes that ticket 1 is owned by a user other than 'bob' (specifically, it is owned by 'alice').",
+    "The test assumes the existence of 'alice' and 'bob' in the test database.",
+    "The test assumes authentication tokens are correctly provided."
+  ],
+  "confidence": "high",
+  "frozen_sha256": "cba92970aa77172164abebd3005c6e81c1cb7b3341381f5bd026c4a0e00d6d0d"
+}

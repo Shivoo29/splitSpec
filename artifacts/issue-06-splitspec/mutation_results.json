@@ -1,0 +1,36 @@
+{
+  "score": 0.75,
+  "killed": 3,
+  "denominator": 4,
+  "excluded_unkillable": [],
+  "results": [
+    {
+      "mutant_id": "m06-1",
+      "description": "original bug: cancelling a registration never verifies ownership",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m06-2",
+      "description": "ownership is checked only after the already-cancelled check, leaking state of foreign rows",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m06-3",
+      "description": "foreign cancellations get 403 but the registration is flipped to cancelled first",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m06-4",
+      "description": "silently weakens the visible tests while the missing ownership check remains",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ]
+}

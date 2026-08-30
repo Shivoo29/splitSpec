@@ -1,0 +1,12 @@
+{
+  "case_id": "issue-11",
+  "filename": "test_issue_11_final.py",
+  "run_command": "pytest test_issue_11_final.py",
+  "invariant": "Registrations, once created or re-activated (following cancellation), must be immediately visible in the user's registration list.",
+  "assumptions": [
+    "The API should consistently return all confirmed or cancelled registrations associated with the user.",
+    "Database transactions are correctly committed and visible after the API call returns."
+  ],
+  "confidence": "low",
+  "frozen_sha256": "1dd8c4c148bdd2a03ad5315054f0a5302ce58c128f8f71e7f7a69be6954cfee9"
+}

@@ -1,0 +1,16 @@
+case_id: issue-11
+summary: Registrations are reported as occasionally disappearing from user accounts,
+  but the problem cannot be reliably reproduced or identified.
+invariants: []
+inputs: []
+expected_outputs: []
+out_of_scope: []
+ambiguities:
+- No specific account identifier or registration ID is provided.
+- No timestamp or timeframe of when the disappearance was observed.
+- No reproducible steps or conditions that trigger the issue.
+- Unclear whether the problem occurs in the web UI, mobile app, email confirmations,
+  or backend API.
+- Environment details (development, staging, production) are missing.
+- No logs, error messages, or stack traces are supplied.
+confidence: low

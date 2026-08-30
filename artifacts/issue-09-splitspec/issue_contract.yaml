@@ -1,0 +1,18 @@
+case_id: issue-09
+summary: A newly created event is sometimes missing from the events listing until
+  a later point, such as after a redeployment.
+invariants: []
+inputs: []
+expected_outputs: []
+out_of_scope:
+- Deployment processes, UI rendering performance, unrelated API endpoints, and any
+  external caching layers not directly tied to the events listing.
+ambiguities:
+- How the event is created (API endpoint, request payload, authentication).
+- The exact timing between event creation and the request for the events list.
+- "Whether any caching (in\u2011memory, Redis, CDN) is involved for the events list."
+- Database transaction semantics or eventual consistency guarantees.
+- Environment details (development vs production, single vs multiple instances).
+- 'Reproducibility steps: no deterministic steps are provided to reliably trigger
+  the issue.'
+confidence: low

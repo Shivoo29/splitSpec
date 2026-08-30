@@ -1,0 +1,35 @@
+case_id: issue-04
+summary: "Monetary amounts in currencies without sub\u2011units (e.g., JPY) are being\
+  \ returned with two decimal places, causing mismatches with client\u2011side totals."
+invariants:
+- "When the currency associated with a monetary amount has zero decimal sub\u2011\
+  units (e.g., JPY), the server\u2019s serialized representation of that amount must\
+  \ contain no fractional part."
+- For such currencies the numeric value returned by the server must be an integer
+  that corresponds to the input amount rounded to a whole number.
+inputs:
+- "A request that creates or retrieves a ticket priced in JPY with an exact whole\u2011\
+  number amount (e.g., 1200)."
+- A request that creates or retrieves a ticket priced in JPY with a fractional amount
+  (e.g., 1200.5).
+- Any API call that returns a price field together with a currency code of JPY.
+expected_outputs:
+- The JSON response includes the price field as an integer value (e.g., 1200) with
+  no trailing ".00".
+- When the input amount contains a fraction, the price field is an integer reflecting
+  the amount rounded to a whole number (e.g., 1201 if rounding up).
+- "Client\u2011side calculations that sum these server\u2011provided prices produce\
+  \ totals that exactly match the server\u2011calculated totals."
+out_of_scope:
+- "Rounding or formatting behavior for currencies that have decimal sub\u2011units\
+  \ (e.g., USD, EUR)."
+- Presentation layer formatting such as UI display of currency symbols.
+- Database storage details of monetary values.
+ambiguities:
+- "The exact rounding rule for fractional yen inputs (nearest, round\u2011half\u2011\
+  up, floor, ceiling) is not specified."
+- Whether the price field is returned as a numeric type or as a string containing
+  the integer value is not clarified.
+- Whether the rounding should be applied at input validation time, storage time, or
+  serialization time is not defined.
+confidence: medium

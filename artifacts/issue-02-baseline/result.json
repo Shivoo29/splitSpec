@@ -1,0 +1,105 @@
+{
+  "case_id": "issue-02",
+  "mode": "baseline",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-02",
+    "summary": "Paginated event listings must produce a sequence identical to a single unpaginated fetch, without duplicate records or ordering changes between pages.",
+    "invariants": [
+      "When fetching events with pagination parameters (e.g., limit/offset or page/size), each page must return a contiguous, non‑overlapping slice of the total ordered result set.",
+      "The concatenation of all paginated pages, in page order, must be exactly the same ordered list as retrieving all events in one request without pagination."
+    ],
+    "inputs": [
+      "A request to the events endpoint with pagination parameters (page number and page size, or limit and offset) under normal, static dataset conditions.",
+      "A request to the same endpoint without any pagination parameters to retrieve the full list."
+    ],
+    "expected_outputs": [
+      "Each paginated response contains a list of events sorted according to the API’s defined ordering (e.g., by event start time, ID, etc.).",
+      "No event appears in more than one paginated response.",
+      "The ordered list obtained by concatenating the paginated responses matches exactly the ordered list returned by the unpaginated request."
+    ],
+    "out_of_scope": [
+      "Changes to the underlying data (e.g., events being added, removed, or updated) between paginated requests.",
+      "Performance characteristics of pagination (query speed, latency).",
+      "User interface rendering of the paginated data.",
+      "Any filtering, search, or authorization logic not directly related to pagination."
+    ],
+    "ambiguities": [
+      "Exact pagination mechanism used by the API (offset‑based vs page‑number‑based).",
+      "The default sorting key and direction applied to the event list.",
+      "Whether any hidden filters or default query parameters affect the result set.",
+      "The size of the dataset required to reliably reproduce the issue."
+    ],
+    "confidence": "medium"
+  },
+  "patch": {
+    "case_id": "issue-02",
+    "diff": "--- a/app/routes/events.py\n+++ b/app/routes/events.py\n@@ -104,7 +104,7 @@\n         return cached\n     total = session.scalar(select(func.count()).select_from(Event)) or 0\n     rows = session.scalars(\n-        select(Event).order_by(Event.starts_at.asc(), Event.id.asc()).limit(limit).offset(offset - 1)\n+        select(Event).order_by(Event.starts_at.asc(), Event.id.asc()).limit(limit).offset(offset)\n     ).all()\n     payload = {\n         \"items\": [event_payload(event) for event in rows],\n--- a/test_final_verification.py\n+++ b/test_final_verification.py\n@@ -0,0 +1,59 @@\n+\"\"\"Final verification test for pagination fix.\"\"\"\n+import pytest\n+\n+\n+@pytest.mark.asyncio\n+async def test_pagination_fix_verification(client):\n+    \"\"\"Verify that the pagination off-by-one issue is fixed.\"\"\"\n+    \n+    # Get all events without pagination\n+    all_response = await client.get(\"/events\")\n+    all_events = all_response.json()\n+    all_ids = [e[\"id\"] for e in all_events[\"items\"]]\n+    total = all_events[\"total\"]\n+    \n+    print(f\"\\n=== Pagination Fix Verification ===\")\n+    print(f\"Total events: {total}\")\n+    print(f\"All events (unpaginated): {all_ids}\")\n+    \n+    # Test case 1: offset=0, limit=2 (first page)\n+    page1 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 0})\n+    page1_ids = [e[\"id\"] for e in page1.json()[\"items\"]]\n+    print(f\"\\nPage 1 (offset=0, limit=2): {page1_ids}\")\n+    assert page1_ids == [3, 1], f\"Expected [3, 1], got {page1_ids}\"\n+    \n+    # Test case 2: offset=2, limit=2 (second page)\n+    page2 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 2})\n+    page2_ids = [e[\"id\"] for e in page2.json()[\"items\"]]\n+    print(f\"Page 2 (offset=2, limit=2): {page2_ids}\")\n+    assert page2_ids == [2], f\"Expected [2], got {page2_ids}\"\n+    \n+    # Test case 3: Verify no overlap between pages\n+    page1_set = set(page1_ids)\n+    page2_set = set(page2_ids)\n+    overlap = page1_set.intersection(page2_set)\n+    print(f\"Overlap between pages: {overlap}\")\n+    assert len(overlap) == 0, f\"Pages should not overlap, but found: {overlap}\"\n+    \n+    # Test case 4: Concatenate all pages and verify it matches unpaginated\n+    concatenated = page1_ids + page2_ids\n+    print(f\"\\nConcatenated pages: {concatenated}\")\n+    print(f\"Unpaginated: {all_ids}\")\n+    assert concatenated == all_ids, f\"Concatenated pages should match unpaginated\"\n+    \n+    # Test case 5: Test with limit=1 (most granular)\n+    print(f\"\\n=== Testing with limit=1 ===\")\n+    paginated_ids = []\n+    for offset in range(0, total):\n+        page = await client.get(\"/events\", params={\"limit\": 1, \"offset\": offset})\n+        page_ids = [e[\"id\"] for e in page.json()[\"items\"]]\n+        paginated_ids.extend(page_ids)\n+        print(f\"Offset {offset}: {page_ids}\")\n+    \n+    print(f\"All paginated (limit=1): {paginated_ids}\")\n+    assert paginated_ids == all_ids, f\"Expected {all_ids}, got {paginated_ids}\"\n+    \n+    # Test case 6: Verify no duplicates in any pagination scenario\n+    assert len(paginated_ids) == len(set(paginated_ids)), \"Duplicate events found\"\n+    \n+    print(f\"\\n✓ All pagination tests passed!\")\n--- a/test_pagination_comprehensive.py\n+++ b/test_pagination_comprehensive.py\n@@ -0,0 +1,61 @@\n+\"\"\"Comprehensive test to verify pagination works correctly.\"\"\"\n+import pytest\n+\n+\n+@pytest.mark.asyncio\n+async def test_pagination_comprehensive(client):\n+    \"\"\"Test that all paginated pages concatenate to match unpaginated results.\"\"\"\n+    # Get all events without pagination\n+    all_events = await client.get(\"/events\")\n+    all_ids = [e[\"id\"] for e in all_events.json()[\"items\"]]\n+    total = all_events.json()[\"total\"]\n+    \n+    print(f\"All events: {all_ids}\")\n+    print(f\"Total: {total}\")\n+    \n+    # Test with limit=1 (most granular)\n+    paginated_ids = []\n+    for offset in range(0, total):\n+        page = await client.get(\"/events\", params={\"limit\": 1, \"offset\": offset})\n+        page_ids = [e[\"id\"] for e in page.json()[\"items\"]]\n+        paginated_ids.extend(page_ids)\n+        print(f\"Offset {offset}: {page_ids}\")\n+    \n+    print(f\"Paginated (limit=1): {paginated_ids}\")\n+    assert paginated_ids == all_ids, f\"Expected {all_ids}, got {paginated_ids}\"\n+    \n+    # Test with limit=2\n+    paginated_ids = []\n+    for offset in range(0, total, 2):\n+        page = await client.get(\"/events\", params={\"limit\": 2, \"offset\": offset})\n+        page_ids = [e[\"id\"] for e in page.json()[\"items\"]]\n+        paginated_ids.extend(page_ids)\n+        print(f\"Offset {offset}: {page_ids}\")\n+    \n+    print(f\"Paginated (limit=2): {paginated_ids}\")\n+    assert paginated_ids == all_ids, f\"Expected {all_ids}, got {paginated_ids}\"\n+    \n+    # Verify no duplicates\n+    assert len(paginated_ids) == len(set(paginated_ids)), \"Duplicate events found in pagination\"\n+\n+\n+@pytest.mark.asyncio\n+async def test_pagination_no_overlap(client):\n+    \"\"\"Test that pages don't overlap.\"\"\"\n+    # Get page 1\n+    page1 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 0})\n+    page1_ids = [e[\"id\"] for e in page1.json()[\"items\"]]\n+    \n+    # Get page 2\n+    page2 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 2})\n+    page2_ids = [e[\"id\"] for e in page2.json()[\"items\"]]\n+    \n+    # Verify no overlap\n+    page1_set = set(page1_ids)\n+    page2_set = set(page2_ids)\n+    overlap = page1_set.intersection(page2_set)\n+    \n+    assert len(overlap) == 0, f\"Pages overlap: {overlap}\"\n+    print(f\"Page 1: {page1_ids}\")\n+    print(f\"Page 2: {page2_ids}\")\n+    print(f\"No overlap: ✓\")\n--- a/test_pagination_issue.py\n+++ b/test_pagination_issue.py\n@@ -0,0 +1,36 @@\n+\"\"\"Test to verify pagination off-by-one issue.\"\"\"\n+import pytest\n+from httpx import AsyncClient\n+\n+\n+@pytest.mark.asyncio\n+async def test_pagination_concatenation():\n+    \"\"\"Test that paginated results match unpaginated results.\"\"\"\n+    async with AsyncClient(app=app, base_url=\"http://test\") as client:\n+        # Get all events without pagination\n+        all_events = await client.get(\"/events\")\n+        all_ids = [e[\"id\"] for e in all_events.json()[\"items\"]]\n+        \n+        # Get events with pagination\n+        page1 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 0})\n+        page2 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 2})\n+        \n+        page1_ids = [e[\"id\"] for e in page1.json()[\"items\"]]\n+        page2_ids = [e[\"id\"] for e in page2.json()[\"items\"]]\n+        \n+        # Concatenate paginated results\n+        paginated_ids = page1_ids + page2_ids\n+        \n+        print(f\"All events: {all_ids}\")\n+        print(f\"Page 1: {page1_ids}\")\n+        print(f\"Page 2: {page2_ids}\")\n+        print(f\"Paginated: {paginated_ids}\")\n+        \n+        # They should match\n+        assert paginated_ids == all_ids, f\"Expected {all_ids}, got {paginated_ids}\"\n+\n+\n+if __name__ == \"__main__\":\n+    from app.main import app\n+    import asyncio\n+    asyncio.run(test_pagination_concatenation())\n--- a/test_pagination_simple.py\n+++ b/test_pagination_simple.py\n@@ -0,0 +1,22 @@\n+\"\"\"Simple test to check pagination behavior.\"\"\"\n+import pytest\n+\n+\n+@pytest.mark.asyncio\n+async def test_pagination_offset_zero(client):\n+    \"\"\"Test that offset=0 returns the first page correctly.\"\"\"\n+    # Get first page with offset=0\n+    page1 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 0})\n+    page1_ids = [e[\"id\"] for e in page1.json()[\"items\"]]\n+    \n+    # Get second page with offset=2\n+    page2 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 2})\n+    page2_ids = [e[\"id\"] for e in page2.json()[\"items\"]]\n+    \n+    print(f\"Page 1 (offset=0): {page1_ids}\")\n+    print(f\"Page 2 (offset=2): {page2_ids}\")\n+    \n+    # Page 1 should have [3, 1] (first 2 events)\n+    # Page 2 should have [2] (remaining event)\n+    assert page1_ids == [3, 1], f\"Expected [3, 1], got {page1_ids}\"\n+    assert page2_ids == [2], f\"Expected [2], got {page2_ids}\"\n",
+    "files_changed": [
+      "app/routes/events.py",
+      "test_final_verification.py",
+      "test_pagination_comprehensive.py",
+      "test_pagination_issue.py",
+      "test_pagination_simple.py"
+    ],
+    "lines_added": 179,
+    "lines_removed": 1,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; Fixed pagination off-by-one error in app/routes/events.py by removing the `- 1` from the offset calculation (line 97). Changed `.offset(offset - 1)` to `.offset(offset)`. This ensures paginated results are contiguous, non-overlapping, and concatenate to match unpaginated results. All visible tests pass."
+  },
+  "verifier_test": null,
+  "validity": null,
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_events.py",
+    "passed": true,
+    "total": 3,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.063,
+    "stdout_tail": "...                                                                      [100%]\n3 passed in 0.05s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-02-b8nnzez0/issue-02-judge/.junit/visible.xml"
+  },
+  "verifier": null,
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 2,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.064,
+    "stdout_tail": "..                                                                       [100%]\n2 passed in 0.05s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-02-b8nnzez0/issue-02-judge/.junit/gold.xml"
+  },
+  "mutation": [],
+  "decision": "REVIEW REQUIRED",
+  "runtime_sec": 247.681,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-02-baseline"
+}

@@ -1,0 +1,174 @@
+{
+  "case_id": "issue-02",
+  "mode": "splitspec",
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "verifier",
+      "base_url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "gemini-3.1-flash-lite",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-02",
+    "summary": "Paging through the event list returns overlapping records and an inconsistent order compared to retrieving the full list in one request.",
+    "invariants": [
+      "For a given deterministic ordering of events, the sequence of records returned by successive pages (using the same limit and offset/skip semantics) must be a partition of the full ordered list with no gaps and no overlaps.",
+      "The concatenation of all pages, when ordered by the pagination parameters, must be identical (both in content and order) to the result of a single request that retrieves the entire list without pagination."
+    ],
+    "inputs": [
+      "A request to the event‑listing endpoint with explicit pagination parameters (e.g., `limit` and `offset` or `page` and `page_size`).",
+      "A request to the same endpoint without pagination (or with a limit large enough to return all events).",
+      "Any combination of filters that do not affect ordering (e.g., date range, status) applied consistently to both paginated and non‑paginated requests."
+    ],
+    "expected_outputs": [
+      "Each paginated response contains at most `limit` events, sorted according to the defined ordering criteria.",
+      "No event appears in more than one page for a given pagination sequence.",
+      "The ordered list obtained by concatenating all paginated pages exactly matches the ordered list returned by the single full fetch.",
+      "The total count reported (if any) is consistent between paginated and full responses."
+    ],
+    "out_of_scope": [
+      "How the ordering is implemented internally (e.g., database `ORDER BY` clause).",
+      "Performance optimisations, caching behavior, or database indexing.",
+      "Error handling for invalid pagination parameters (negative values, non‑numeric input).",
+      "Behavior when filters change the underlying dataset between page requests."
+    ],
+    "ambiguities": [
+      "The exact pagination scheme used by the API (offset‑based vs. page‑number‑based) is not specified.",
+      "The field(s) that define the deterministic ordering of events (e.g., start time, creation timestamp, ID) are not documented.",
+      "Whether the API includes a total count or next‑page token in the response, and how that should be validated.",
+      "How the endpoint behaves when the dataset changes between page requests (e.g., new events added)."
+    ],
+    "confidence": "medium"
+  },
+  "patch": {
+    "case_id": "issue-02",
+    "diff": "--- a/app/routes/events.py\n+++ b/app/routes/events.py\n@@ -104,7 +104,7 @@\n         return cached\n     total = session.scalar(select(func.count()).select_from(Event)) or 0\n     rows = session.scalars(\n-        select(Event).order_by(Event.starts_at.asc(), Event.id.asc()).limit(limit).offset(offset - 1)\n+        select(Event).order_by(Event.starts_at.asc(), Event.id.asc()).limit(limit).offset(offset)\n     ).all()\n     payload = {\n         \"items\": [event_payload(event) for event in rows],\n--- a/test_final_verification.py\n+++ b/test_final_verification.py\n@@ -0,0 +1,88 @@\n+\"\"\"Final verification test for pagination fix.\"\"\"\n+import pytest\n+from httpx import AsyncClient\n+\n+\n+@pytest.mark.asyncio\n+async def test_pagination_comprehensive(client: AsyncClient):\n+    \"\"\"Comprehensive test for pagination fix.\"\"\"\n+    \n+    # Test 1: Get all events in one request\n+    all_events = await client.get(\"/events\")\n+    assert all_events.status_code == 200\n+    all_data = all_events.json()\n+    all_items = all_data[\"items\"]\n+    total_count = all_data[\"total\"]\n+    \n+    print(f\"Total events: {total_count}\")\n+    print(f\"All event IDs: {[e['id'] for e in all_items]}\")\n+    \n+    # Test 2: Verify pagination with different page sizes\n+    for limit in [1, 2, 3]:\n+        print(f\"\\n--- Testing with limit={limit} ---\")\n+        \n+        # Collect all pages\n+        all_paginated_items = []\n+        offset = 0\n+        \n+        while offset < total_count:\n+            page = await client.get(\"/events\", params={\"limit\": limit, \"offset\": offset})\n+            assert page.status_code == 200\n+            page_data = page.json()\n+            page_items = page_data[\"items\"]\n+            \n+            print(f\"Page at offset={offset}: {[e['id'] for e in page_items]}\")\n+            \n+            # Verify no more than limit items\n+            assert len(page_items) <= limit, f\"Page returned {len(page_items)} items, expected at most {limit}\"\n+            \n+            # Verify items are in correct order\n+            if offset > 0:\n+                # First item of this page should come after last item of previous page\n+                if all_paginated_items and page_items:\n+                    last_prev_id = all_paginated_items[-1][\"id\"]\n+                    first_curr_id = page_items[0][\"id\"]\n+                    # Since ordering is by starts_at then id, we need to check the actual order\n+                    # For simplicity, just check they're different (no overlap)\n+                    assert last_prev_id != first_curr_id, f\"Overlap detected: {last_prev_id} appears in consecutive pages\"\n+            \n+            all_paginated_items.extend(page_items)\n+            offset += limit\n+        \n+        # Verify concatenated pages match full list\n+        paginated_ids = [e[\"id\"] for e in all_paginated_items]\n+        all_ids = [e[\"id\"] for e in all_items]\n+        \n+        print(f\"Concatenated paginated IDs: {paginated_ids}\")\n+        print(f\"Full list IDs: {all_ids}\")\n+        \n+        assert paginated_ids == all_ids, f\"Paginated list {paginated_ids} doesn't match full list {all_ids}\"\n+        \n+        # Verify no duplicates\n+        assert len(paginated_ids) == len(set(paginated_ids)), f\"Duplicate IDs found in paginated results: {paginated_ids}\"\n+    \n+    print(\"\\n✓ All pagination tests passed!\")\n+\n+\n+@pytest.mark.asyncio\n+async def test_pagination_edge_cases(client: AsyncClient):\n+    \"\"\"Test edge cases for pagination.\"\"\"\n+    \n+    # Test with offset=0 (first page)\n+    page1 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 0})\n+    assert page1.status_code == 200\n+    assert len(page1.json()[\"items\"]) == 2\n+    assert [e[\"id\"] for e in page1.json()[\"items\"]] == [3, 1]\n+    \n+    # Test with offset=2 (second page)\n+    page2 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 2})\n+    assert page2.status_code == 200\n+    assert len(page2.json()[\"items\"]) == 1  # Only one event left\n+    assert [e[\"id\"] for e in page2.json()[\"items\"]] == [2]\n+    \n+    # Test with offset beyond total count\n+    page_empty = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 10})\n+    assert page_empty.status_code == 200\n+    assert len(page_empty.json()[\"items\"]) == 0\n+    \n+    print(\"✓ Edge case tests passed!\")\n--- a/test_pagination_issue.py\n+++ b/test_pagination_issue.py\n@@ -0,0 +1,76 @@\n+\"\"\"Test to demonstrate the pagination off-by-one issue.\"\"\"\n+import pytest\n+from httpx import AsyncClient\n+\n+\n+@pytest.mark.asyncio\n+async def test_pagination_no_overlap(client: AsyncClient):\n+    \"\"\"Test that pagination doesn't return overlapping records.\"\"\"\n+    # Get all events in one request\n+    all_events = await client.get(\"/events\")\n+    assert all_events.status_code == 200\n+    all_items = all_events.json()[\"items\"]\n+    \n+    # Get first page (offset=0, limit=2)\n+    page1 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 0})\n+    assert page1.status_code == 200\n+    page1_items = page1.json()[\"items\"]\n+    \n+    # Get second page (offset=2, limit=2) - should start after the first page\n+    page2 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 2})\n+    assert page2.status_code == 200\n+    page2_items = page2.json()[\"items\"]\n+    \n+    print(f\"All events: {[e['id'] for e in all_items]}\")\n+    print(f\"Page 1 (offset=0): {[e['id'] for e in page1_items]}\")\n+    print(f\"Page 2 (offset=2): {[e['id'] for e in page2_items]}\")\n+    \n+    # Check for overlaps\n+    page1_ids = {e[\"id\"] for e in page1_items}\n+    page2_ids = {e[\"id\"] for e in page2_items}\n+    overlap = page1_ids & page2_ids\n+    \n+    print(f\"Page 1 IDs: {page1_ids}\")\n+    print(f\"Page 2 IDs: {page2_ids}\")\n+    print(f\"Overlap: {overlap}\")\n+    \n+    # There should be no overlap\n+    assert len(overlap) == 0, f\"Pages have overlapping records: {overlap}\"\n+    \n+    # Concatenated pages should match the full list\n+    concatenated = page1_items + page2_items\n+    concatenated_ids = [e[\"id\"] for e in concatenated]\n+    all_ids = [e[\"id\"] for e in all_items]\n+    \n+    print(f\"Concatenated: {concatenated_ids}\")\n+    print(f\"All events: {all_ids}\")\n+    \n+    assert concatenated_ids == all_ids, f\"Concatenated pages {concatenated_ids} don't match full list {all_ids}\"\n+\n+\n+@pytest.mark.asyncio\n+async def test_pagination_order_consistency(client: AsyncClient):\n+    \"\"\"Test that pagination maintains consistent order.\"\"\"\n+    # Get all events\n+    all_events = await client.get(\"/events\")\n+    all_ids = [e[\"id\"] for e in all_events.json()[\"items\"]]\n+    \n+    # Get events with pagination\n+    page1 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 0})\n+    page2 = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 2})\n+    \n+    paginated_ids = [e[\"id\"] for e in page1.json()[\"items\"]] + [e[\"id\"] for e in page2.json()[\"items\"]]\n+    \n+    print(f\"Full list order: {all_ids}\")\n+    print(f\"Paginated order: {paginated_ids}\")\n+    \n+    assert paginated_ids == all_ids, f\"Pagination order {paginated_ids} doesn't match full list order {all_ids}\"\n+\n+\n+@pytest.mark.asyncio\n+async def test_existing_pagination_test(client: AsyncClient):\n+    \"\"\"Verify the existing test still passes.\"\"\"\n+    page = await client.get(\"/events\", params={\"limit\": 2, \"offset\": 0})\n+    assert page.status_code == 200\n+    assert [e[\"id\"] for e in page.json()[\"items\"]] == [3, 1]\n+    assert page.json()[\"total\"] == 3\n",
+    "files_changed": [
+      "app/routes/events.py",
+      "test_final_verification.py",
+      "test_pagination_issue.py"
+    ],
+    "lines_added": 165,
+    "lines_removed": 1,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; Fixed pagination off-by-one error in app/routes/events.py by removing the incorrect `- 1` from the offset calculation. The bug caused overlapping records and missing data in paginated event listings. Changed line 89 from `offset(offset - 1)` to `offset(offset)`. All tests pass and pagination now correctly partitions the full event list without overlaps or gaps."
+  },
+  "verifier_test": {
+    "case_id": "issue-02",
+    "filename": "test_issue_02_repro.py",
+    "contents": "import pytest\nimport pytest_asyncio\nfrom httpx import AsyncClient\n\n@pytest.mark.asyncio\nasync def test_pagination_partitioning(client):\n    # Retrieve all events to establish the ground truth order\n    # Based on visible tests, there are 3 events with IDs [3, 1, 2].\n    \n    # Fetch all events at once to establish reference ordering.\n    full_response = await client.get(\"/events\", params={\"limit\": 3, \"offset\": 0})\n    assert full_response.status_code == 200\n    all_events = full_response.json()[\"items\"]\n    all_ids = [e[\"id\"] for e in all_events]\n    \n    # Now fetch the same list in chunks of size 1, using standard offset pagination.\n    # Expected invariant: Concatenating the items from these pages must equal the original list.\n    p1_res = await client.get(\"/events\", params={\"limit\": 1, \"offset\": 0})\n    p2_res = await client.get(\"/events\", params={\"limit\": 1, \"offset\": 1})\n    p3_res = await client.get(\"/events\", params={\"limit\": 1, \"offset\": 2})\n    \n    assert p1_res.status_code == 200\n    assert p2_res.status_code == 200\n    assert p3_res.status_code == 200\n    \n    paginated_ids = (\n        [e[\"id\"] for e in p1_res.json()[\"items\"]] +\n        [e[\"id\"] for e in p2_res.json()[\"items\"]] +\n        [e[\"id\"] for e in p3_res.json()[\"items\"]]\n    )\n    \n    assert paginated_ids == all_ids, f\"Expected {all_ids}, but got {paginated_ids}\"",
+    "run_command": "pytest test_issue_02_repro.py",
+    "invariant": "For a deterministic ordered list, concatenation of paginated sub-lists (using sequential offsets) must reconstruct the full original list exactly, without gaps or overlaps.",
+    "assumptions": [
+      "The /events endpoint supports pagination via 'limit' and 'offset' query parameters.",
+      "The server-side ordering is deterministic (the test assumes the order [3, 1, 2] based on the existing test suite).",
+      "The test environment has at least 3 events pre-populated, as per existing test data."
+    ],
+    "confidence": "high",
+    "frozen_sha256": "8091ceb055d818284139a874bba5ec5be400fe126bbee3efab2596e50b004ebb"
+  },
+  "validity": {
+    "compiles": true,
+    "runs": true,
+    "fails_on_original_bug": true,
+    "passed": true,
+    "reason": "test failed on the buggy code (1 failures) as expected"
+  },
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_events.py",
+    "passed": true,
+    "total": 3,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.064,
+    "stdout_tail": "...                                                                      [100%]\n3 passed in 0.05s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-02-qdc60qbz/issue-02-judge/.junit/visible.xml"
+  },
+  "verifier": {
+    "label": "verifier",
+    "command": "pytest -q --junitxml=/workspace/.junit/verifier.xml test_issue_02_repro.py",
+    "passed": true,
+    "total": 1,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.043,
+    "stdout_tail": ".                                                                        [100%]\n1 passed in 0.04s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-02-qdc60qbz/issue-02-judge/.junit/verifier.xml"
+  },
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": true,
+    "total": 2,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.07,
+    "stdout_tail": "..                                                                       [100%]\n2 passed in 0.05s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-02-qdc60qbz/issue-02-judge/.junit/gold.xml"
+  },
+  "mutation": [
+    {
+      "mutant_id": "m02-1",
+      "description": "original bug: list offset is shifted by one, repeating records across pages",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m02-2",
+      "description": "partial fix: offsets are correct but every page is one row short at the tail",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m02-3",
+      "description": "returns the right rows per page but reports total one less than reality",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m02-4",
+      "description": "silently weakens the visible tests while the off-by-one pagination bug remains",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ],
+  "decision": "ACCEPT",
+  "runtime_sec": 461.925,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-02-splitspec"
+}

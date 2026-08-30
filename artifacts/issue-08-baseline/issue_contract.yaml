@@ -1,0 +1,34 @@
+case_id: issue-08
+summary: Retrying a payment request with the same Idempotency-Key sometimes creates
+  a second payment instead of being idempotent.
+invariants:
+- For any given Idempotency-Key, the system must create at most one payment record.
+- A subsequent request with the same Idempotency-Key must return the same observable
+  response as the original request and must not trigger a new payment creation.
+inputs:
+- "POST /payments (or equivalent) with a valid payload and an Idempotency-Key header;\
+  \ the request experiences a client\u2011side timeout before a response is received."
+- A second POST to the same endpoint with the identical Idempotency-Key and identical
+  payload after the timeout.
+expected_outputs:
+- Exactly one new payment record appears in the database (or persistent store).
+- The second request returns the same HTTP status code and response body as the first
+  successful request.
+- No additional charge is sent to the external bank/processor for the second request.
+out_of_scope:
+- Requests that use a different Idempotency-Key.
+- Endpoints unrelated to payment creation.
+- "Behavior of network timeouts or client\u2011side retry logic beyond the Idempotency-Key\
+  \ semantics."
+- "Bank\u2011side failures unrelated to duplicate request handling."
+ambiguities:
+- Exact URL path, HTTP method, and required payload fields for the payment request.
+- "Definition of the \"timeout\" condition (e.g., client\u2011side socket timeout,\
+  \ server\u2011side processing deadline)."
+- The expected HTTP status code and response body for an idempotent retry.
+- Whether payment processing is synchronous or asynchronous, and how that affects
+  when the Idempotency-Key check occurs.
+- Database schema details that record Idempotency-Key values.
+- Concurrency model (e.g., whether two requests can be processed in parallel) and
+  any locking mechanisms.
+confidence: medium

@@ -1,0 +1,29 @@
+case_id: issue-05
+summary: A user can retrieve full ticket details for a ticket that belongs to a different
+  user, violating the requirement that ticket data be accessible only to its owner.
+invariants:
+- When an authenticated request is made to retrieve a ticket, the system must return
+  the ticket details only if the ticket is owned by the requesting user.
+- "If the ticket is not owned by the requesting user, the system must not return the\
+  \ ticket details and must respond with an access\u2011denied status."
+inputs:
+- Authenticated GET request for /tickets/{ticket_id} where ticket_id belongs to another
+  user.
+- Authenticated GET request for /tickets/{ticket_id} where ticket_id belongs to the
+  requesting user (control case).
+expected_outputs:
+- For the control case, the response includes the full ticket details with a success
+  status (e.g., 200 OK).
+- "For the cross\u2011user request, the response does not include any ticket details\
+  \ and returns an access\u2011denied status (e.g., 403 Forbidden or 404 Not Found)."
+out_of_scope:
+- Ticket creation, update, or deletion behavior.
+- Authorization rules for admin or privileged roles.
+- "Non\u2011ticket related endpoints."
+ambiguities:
+- Exact HTTP status code and error payload to be used for denied access (403 vs 404).
+- Whether the system should mask the existence of the ticket (404) or explicitly deny
+  (403).
+- Details of the authentication mechanism (e.g., JWT, session cookie) and how ownership
+  is determined.
+confidence: high

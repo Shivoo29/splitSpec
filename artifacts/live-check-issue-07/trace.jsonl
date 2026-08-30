@@ -1,0 +1,49 @@
+{"ts": 1788030046.9836302, "actor": "contract", "kind": "call", "case_id": "issue-07", "model": "gemini-3.1-flash-lite"}
+{"ts": 1788030046.9837563, "actor": "contract", "kind": "tokens", "input_tokens": 10197, "output_tokens": 439, "model": "gemini-3.1-flash-lite"}
+{"ts": 1788030046.983785, "actor": "contract", "kind": "parsed", "case_id": "issue-07", "confidence": "medium", "n_invariants": 3, "n_ambiguities": 1}
+{"ts": 1788030048.7357965, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 1129, "output_tokens": 16, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030048.7366323, "actor": "verifier", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788030052.0474448, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 1548, "output_tokens": 23, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030052.047704, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "app/routes/registrations.py", "chars": 4980, "truncated": false}
+{"ts": 1788030057.508239, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 3036, "output_tokens": 207, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030057.5106485, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_reproduction.py", "chars": 749}
+{"ts": 1788030064.3238397, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 3269, "output_tokens": 34, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030065.4881344, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-07/test_registrations.py"], "exit_code": 0, "duration_sec": 1.164}
+{"ts": 1788030068.2790573, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 3479, "output_tokens": 30, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030068.2793415, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "visible_tests/issue-07/test_registrations.py", "chars": 2052, "truncated": false}
+{"ts": 1788030077.0122893, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 4170, "output_tokens": 415, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030077.0125852, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_race_condition.py", "chars": 1386}
+{"ts": 1788030083.2261164, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 4613, "output_tokens": 26, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030084.7115815, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_race_condition.py"], "exit_code": 1, "duration_sec": 1.485}
+{"ts": 1788030091.3957543, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 5307, "output_tokens": 18, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030091.395967, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "seed.py", "chars": 4466, "truncated": false}
+{"ts": 1788030101.0512943, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 6953, "output_tokens": 496, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030101.051564, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_race_condition.py", "chars": 1646}
+{"ts": 1788030108.08242, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 7477, "output_tokens": 26, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030109.6377044, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_race_condition.py"], "exit_code": 1, "duration_sec": 1.555}
+{"ts": 1788030115.81581, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 8158, "output_tokens": 34, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030117.10845, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-07/test_registrations.py"], "exit_code": 0, "duration_sec": 1.292}
+{"ts": 1788030122.5476675, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 8368, "output_tokens": 304, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030122.5479288, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_race_condition.py", "chars": 1064}
+{"ts": 1788030124.5247805, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 8700, "output_tokens": 26, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030126.0631187, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_race_condition.py"], "exit_code": 1, "duration_sec": 1.538}
+{"ts": 1788030130.6708965, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 9379, "output_tokens": 34, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030131.8624845, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-07/test_registrations.py"], "exit_code": 0, "duration_sec": 1.191}
+{"ts": 1788030138.0338674, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 9589, "output_tokens": 612, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030138.0341678, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_race_condition.py", "chars": 1975}
+{"ts": 1788030142.8086588, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 10229, "output_tokens": 26, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030143.9590576, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_race_condition.py"], "exit_code": 1, "duration_sec": 1.15}
+{"ts": 1788030149.8294933, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 10870, "output_tokens": 251, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030149.8298104, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_race_condition.py", "chars": 765}
+{"ts": 1788030153.7229757, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 11148, "output_tokens": 26, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030155.1484902, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_race_condition.py"], "exit_code": 1, "duration_sec": 1.425}
+{"ts": 1788030160.0054133, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 11855, "output_tokens": 395, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030160.0056908, "actor": "verifier", "kind": "tool_call", "tool": "write_file", "path": "test_race_condition.py", "chars": 1349}
+{"ts": 1788030163.768086, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 12278, "output_tokens": 26, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030164.9019003, "actor": "verifier", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_race_condition.py"], "exit_code": 1, "duration_sec": 1.134}
+{"ts": 1788030174.9807189, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 12888, "output_tokens": 465, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788030174.9808095, "actor": "verifier", "kind": "tool_call", "tool": "finish", "chars": 1724}
+{"ts": 1788030174.980836, "actor": "verifier", "kind": "agent_end", "stop_reason": "finished", "final_message_len": 1724, "calls": 21, "tokens_used": 157933}
+{"ts": 1788030174.9808984, "actor": "verifier", "kind": "test", "case_id": "issue-07", "stop_reason": "finished", "filename": "test_race_condition.py", "invariant": "For any given (user_id, event_id), there must exist at most one 'confirmed' Registration row. Concurrent registration requests must be handled such that only one succeeds.", "confidence": "high", "n_assumptions": 3, "contents_len": 1101}
+{"ts": 1788030176.1317196, "actor": "gate", "kind": "validity", "case_id": "issue-07", "test_filename": "test_race_condition.py", "compiles": true, "runs": true, "fails_on_original_bug": true, "passed": true, "reason": "test failed on the buggy code (1 failures) as expected", "exit_code": 1}
+{"ts": 1788030177.2058737, "actor": "gate", "kind": "validity", "case_id": "issue-07", "test_filename": "test_trivially_passes.py", "compiles": true, "runs": true, "fails_on_original_bug": false, "passed": false, "reason": "test passed on buggy code (0 failed, 0 errors), so it is not discriminating", "exit_code": 0}
