@@ -1,0 +1,134 @@
+/* Fira Sans for prose, Fira Code for anything the harness emitted verbatim.
+   Loaded with real fallbacks so the page is still correct with no network. */
+@import url("https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500&family=Fira+Sans:wght@400;600&display=swap");
+@import "tailwindcss";
+
+
+/* Every colour is defined once here, in the light palette. The dark block below
+   redefines the same tokens and nothing else, so a value can never exist in only
+   one theme. Verdict colours are paired with an icon and a text label everywhere
+   they are used - hue alone never carries the meaning. */
+:root {
+  color-scheme: light;
+
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --border: #dbeafe;
+  --border-strong: #94a3b8;
+
+  --fg: #0f172a;
+  --fg-muted: #475569;
+  --fg-faint: #64748b;
+
+  --accent: #1e40af;
+  --accent-fg: #ffffff;
+
+  /* Status. Green/red carry the thesis of the project, so they are the two most
+     saturated colours on the page and nothing else competes with them. */
+  --pass: #15803d;
+  --pass-bg: #dcfce7;
+  --fail: #b91c1c;
+  --fail-bg: #fee2e2;
+  --warn: #b45309;
+  --warn-bg: #fef3c7;
+  --none: #64748b;
+  --none-bg: #f1f5f9;
+
+  --add: #15803d;
+  --del: #b91c1c;
+
+  --radius: 6px;
+  --rail: 280px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --bg: #0b1020;
+    --surface: #111a2e;
+    --surface-2: #16213a;
+    --border: #24324f;
+    --border-strong: #47597f;
+
+    --fg: #e8eefc;
+    --fg-muted: #a8b8d8;
+    --fg-faint: #8095bb;
+
+    --accent: #60a5fa;
+    --accent-fg: #0b1020;
+
+    /* Desaturated tonal variants, not the light values inverted: the light greens
+       and reds fail contrast against a dark surface. */
+    --pass: #4ade80;
+    --pass-bg: #0f2f1d;
+    --fail: #f87171;
+    --fail-bg: #34161a;
+    --warn: #fbbf24;
+    --warn-bg: #33260a;
+    --none: #94a3b8;
+    --none-bg: #1a2438;
+
+    --add: #4ade80;
+    --del: #f87171;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-pass: var(--pass);
+  --color-pass-bg: var(--pass-bg);
+  --color-fail: var(--fail);
+  --color-fail-bg: var(--fail-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-none: var(--none);
+  --color-none-bg: var(--none-bg);
+  --font-sans: "Fira Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Fira Code", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  /* Counts, durations and ids sit in columns; proportional digits would make
+     them jitter between rows. */
+  font-variant-numeric: tabular-nums;
+}
+
+/* Wide content (diffs, pytest output, tables) scrolls inside its own box. The
+   page body must never scroll sideways. */
+.scroll-x {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+a {
+  color: inherit;
+}
+
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
