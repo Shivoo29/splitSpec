@@ -1,5 +1,10 @@
 import Link from "next/link";
-import { loadEntries, stopReason, type Entry, type RunResult } from "@/lib/artifacts";
+import {
+  loadEntries,
+  stopReason,
+  type Entry,
+  type RunResult,
+} from "@/lib/artifacts";
 import { Card, VerdictChip } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -34,8 +39,12 @@ export default async function ComparePage() {
     const goldScored = runs.filter((r) => r.gold !== null).length;
 
     // What the system itself caught, using only what it was allowed to see.
-    const shallow = runs.filter((r) => r.visible?.passed && r.gold && !r.gold.passed);
-    const caught = shallow.filter((r) => r.verifier && !r.verifier.passed).length;
+    const shallow = runs.filter(
+      (r) => r.visible?.passed && r.gold && !r.gold.passed,
+    );
+    const caught = shallow.filter(
+      (r) => r.verifier && !r.verifier.passed,
+    ).length;
 
     const gated = runs.filter((r) => r.validity !== null);
     const valid = gated.filter((r) => r.validity!.passed).length;
@@ -51,7 +60,9 @@ export default async function ComparePage() {
         ? null
         : runtimes.length % 2
           ? runtimes[(runtimes.length - 1) / 2]
-          : (runtimes[runtimes.length / 2 - 1] + runtimes[runtimes.length / 2]) / 2;
+          : (runtimes[runtimes.length / 2 - 1] +
+              runtimes[runtimes.length / 2]) /
+            2;
 
     return {
       mode,
@@ -61,7 +72,11 @@ export default async function ComparePage() {
         shallow.length,
         "no run yet where visible passed, gold failed, and a verifier test graded it",
       ),
-      validity: rate(valid, gated.length, "no verifier test has been through the validity gate"),
+      validity: rate(
+        valid,
+        gated.length,
+        "no verifier test has been through the validity gate",
+      ),
       goldCatch: rate(goldCaught, goldScored, "no run has a gold suite result"),
       truncated: `${truncated} / ${runs.length}`,
       median: median === null ? "not measured" : `${median.toFixed(1)}s`,
@@ -69,12 +84,13 @@ export default async function ComparePage() {
   });
 
   return (
-    <div className="mx-auto max-w-[1400px] px-6 py-6">
-      <header className="mb-5">
-        <h1 className="text-lg font-semibold tracking-tight">Baseline vs SplitSpec vs gold oracle</h1>
-        <p className="mt-0.5 text-[13px] text-fg-muted">
+    <div className="mx-auto max-w-[1240px] px-8 py-12">
+      <header className="mb-10">
+        <h1 className="t-display">Baseline vs SplitSpec vs gold oracle</h1>
+        <p className="t-body mt-2">
           Degraded runs are excluded from every figure. A cell reading{" "}
-          <span className="font-mono">not measured</span> has no data behind it — it is not a zero.
+          <span className="font-mono">not measured</span> has no data behind it
+          — it is not a zero.
         </p>
       </header>
 
@@ -85,8 +101,12 @@ export default async function ComparePage() {
               <tr className="text-[11px] tracking-wide text-fg-faint uppercase">
                 <th className="pb-2 pr-4 font-medium">Mode</th>
                 <th className="pb-2 pr-4 font-medium">Runs</th>
-                <th className="pb-2 pr-4 font-medium">False-fix detection recall</th>
-                <th className="pb-2 pr-4 font-medium">Generated test validity</th>
+                <th className="pb-2 pr-4 font-medium">
+                  False-fix detection recall
+                </th>
+                <th className="pb-2 pr-4 font-medium">
+                  Generated test validity
+                </th>
                 <th className="pb-2 pr-4 font-medium">Gold caught the bug</th>
                 <th className="pb-2 pr-4 font-medium">Truncated</th>
                 <th className="pb-2 font-medium">Median runtime</th>
@@ -99,10 +119,16 @@ export default async function ComparePage() {
                   <td className="py-2.5 pr-4">{row.runs}</td>
                   {[row.recall, row.validity, row.goldCatch].map((cell, i) => (
                     <td key={i} className="py-2.5 pr-4">
-                      <span className={cell.label === "not measured" ? "text-fg-faint" : ""}>
+                      <span
+                        className={
+                          cell.label === "not measured" ? "text-fg-faint" : ""
+                        }
+                      >
                         {cell.label}
                       </span>
-                      <span className="block text-[11px] text-fg-faint">{cell.detail}</span>
+                      <span className="block text-[11px] text-fg-faint">
+                        {cell.detail}
+                      </span>
                     </td>
                   ))}
                   <td className="py-2.5 pr-4">{row.truncated}</td>
@@ -132,7 +158,10 @@ export default async function ComparePage() {
                   return (
                     <tr key={entry.id} className="border-t border-border">
                       <td className="py-2 pr-4">
-                        <Link href={`/run/${entry.id}`} className="hover:text-accent">
+                        <Link
+                          href={`/run/${entry.id}`}
+                          className="hover:text-accent"
+                        >
                           {entry.id}
                         </Link>
                       </td>
@@ -147,12 +176,23 @@ export default async function ComparePage() {
                 return (
                   <tr key={entry.id} className="border-t border-border">
                     <td className="py-2 pr-4">
-                      <Link href={`/run/${entry.id}`} className="hover:text-accent">
+                      <Link
+                        href={`/run/${entry.id}`}
+                        className="hover:text-accent"
+                      >
                         {entry.id}
                       </Link>
                     </td>
                     <td className="py-2 pr-4">
-                      <VerdictChip verdict={r.visible ? (r.visible.passed ? "pass" : "fail") : "none"} />
+                      <VerdictChip
+                        verdict={
+                          r.visible
+                            ? r.visible.passed
+                              ? "pass"
+                              : "fail"
+                            : "none"
+                        }
+                      />
                     </td>
                     <td className="py-2 pr-4">
                       <VerdictChip
@@ -168,7 +208,11 @@ export default async function ComparePage() {
                       />
                     </td>
                     <td className="py-2 pr-4">
-                      <VerdictChip verdict={r.gold ? (r.gold.passed ? "pass" : "fail") : "none"} />
+                      <VerdictChip
+                        verdict={
+                          r.gold ? (r.gold.passed ? "pass" : "fail") : "none"
+                        }
+                      />
                     </td>
                     <td className="py-2 text-[12px] text-fg-muted">
                       {shallow

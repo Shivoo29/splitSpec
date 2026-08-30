@@ -6,11 +6,20 @@ import type { RunResult, TestRun, Verdict } from "@/lib/artifacts";
    vision, and a printed page. */
 
 function Glyph({ verdict }: { verdict: Verdict }) {
-  const common = { width: 14, height: 14, viewBox: "0 0 16 16", "aria-hidden": true } as const;
+  const common = {
+    width: 14,
+    height: 14,
+    viewBox: "0 0 16 16",
+    "aria-hidden": true,
+  } as const;
   if (verdict === "pass")
     return (
       <svg {...common} fill="none" stroke="currentColor" strokeWidth="2.2">
-        <path d="M3 8.5l3.2 3.2L13 5" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          d="M3 8.5l3.2 3.2L13 5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     );
   if (verdict === "fail")
@@ -47,10 +56,16 @@ const VERDICT_WORD: Record<Verdict, string> = {
   none: "N/A",
 };
 
-export function VerdictChip({ verdict, label }: { verdict: Verdict; label?: string }) {
+export function VerdictChip({
+  verdict,
+  label,
+}: {
+  verdict: Verdict;
+  label?: string;
+}) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded border px-2 py-0.5 font-mono text-[11px] font-medium ${VERDICT_STYLE[verdict]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-[3px] text-[11px] font-medium tracking-[0.01em] ${VERDICT_STYLE[verdict]}`}
     >
       <Glyph verdict={verdict} />
       {label ?? VERDICT_WORD[verdict]}
@@ -70,7 +85,7 @@ const DECISION_STYLE: Record<string, string> = {
 export function DecisionBadge({ decision }: { decision: string }) {
   return (
     <span
-      className={`inline-block rounded border px-2.5 py-1 font-mono text-xs font-medium tracking-wide ${
+      className={`inline-block rounded-full border px-3.5 py-1.5 text-[12px] font-semibold tracking-[0.02em] ${
         DECISION_STYLE[decision] ?? DECISION_STYLE["REVIEW REQUIRED"]
       }`}
     >
@@ -92,24 +107,30 @@ export function Card({
 }) {
   return (
     <section
-      className={`min-w-0 rounded-[var(--radius)] border border-border bg-surface ${className}`}
+      className={`card min-w-0 rounded-[var(--radius)] border border-border bg-surface ${className}`}
     >
       {title !== undefined && (
-        <header className="flex items-baseline justify-between gap-3 border-b border-border px-3.5 py-2.5">
-          <h2 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">{title}</h2>
+        <header className="flex items-baseline justify-between gap-3 border-b border-border px-5 py-3.5">
+          <h2 className="t-section">{title}</h2>
           {aside}
         </header>
       )}
-      <div className="p-3.5">{children}</div>
+      <div className="p-5">{children}</div>
     </section>
   );
 }
 
-export function Field({ label, children }: { label: string; children: ReactNode }) {
+export function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-0.5">
-      <dt className="text-[11px] text-fg-faint">{label}</dt>
-      <dd className="font-mono text-[13px] text-fg">{children}</dd>
+      <dt className="t-caption">{label}</dt>
+      <dd className="font-mono text-[13.5px] text-fg">{children}</dd>
     </div>
   );
 }
@@ -130,33 +151,47 @@ export function SuiteColumn({
   const verdict: Verdict = run === null ? "none" : run.passed ? "pass" : "fail";
   return (
     <div
-      className={`min-w-0 rounded-[var(--radius)] border p-3 ${
+      className={`min-w-0 rounded-[var(--radius)] border p-4 ${
         emphasis ? "border-border-strong" : "border-border"
       } bg-surface-2`}
     >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <h3 className="text-xs font-semibold tracking-wide text-fg-muted uppercase">{label}</h3>
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h3 className="t-section">{label}</h3>
         <VerdictChip verdict={verdict} />
       </div>
       {run === null ? (
-        <p className="font-mono text-xs text-fg-faint">{note ?? "did not run"}</p>
+        <p className="font-mono text-xs text-fg-faint">
+          {note ?? "did not run"}
+        </p>
       ) : (
-        <dl className="grid grid-cols-3 gap-2 font-mono text-[13px]">
+        <dl className="grid grid-cols-3 gap-3">
           <div>
-            <dt className="text-[11px] text-fg-faint">tests</dt>
-            <dd>{run.total}</dd>
+            <dt className="t-caption">tests</dt>
+            <dd className="mt-0.5 text-[19px] font-medium tracking-[-0.01em]">
+              {run.total}
+            </dd>
           </div>
           <div>
-            <dt className="text-[11px] text-fg-faint">failed</dt>
-            <dd className={run.failures > 0 ? "text-fail" : ""}>{run.failures}</dd>
+            <dt className="t-caption">failed</dt>
+            <dd
+              className={`mt-0.5 text-[19px] font-medium tracking-[-0.01em] ${run.failures > 0 ? "text-fail" : "text-fg-faint"}`}
+            >
+              {run.failures}
+            </dd>
           </div>
           <div>
-            <dt className="text-[11px] text-fg-faint">errors</dt>
-            <dd className={run.errors > 0 ? "text-warn" : ""}>{run.errors}</dd>
+            <dt className="t-caption">errors</dt>
+            <dd
+              className={`mt-0.5 text-[19px] font-medium tracking-[-0.01em] ${run.errors > 0 ? "text-warn" : "text-fg-faint"}`}
+            >
+              {run.errors}
+            </dd>
           </div>
         </dl>
       )}
-      {note && run !== null && <p className="mt-2 text-[11px] text-fg-faint">{note}</p>}
+      {note && run !== null && (
+        <p className="mt-2 text-[11px] text-fg-faint">{note}</p>
+      )}
     </div>
   );
 }
@@ -165,10 +200,11 @@ export function SuiteColumn({
 export function StopReasonNote({ reason }: { reason: string | null }) {
   if (reason === null || reason === "finished") return null;
   return (
-    <p className="rounded-[var(--radius)] border border-warn/40 bg-warn-bg px-3 py-2 text-[12px] text-warn">
-      <strong className="font-semibold">Truncated attempt.</strong> The agent stopped with{" "}
-      <code className="font-mono">{reason}</code> rather than <code className="font-mono">finished</code>,
-      so the patch and the evidence below may be partial.
+    <p className="rounded-[var(--radius-sm)] border border-warn/30 bg-warn-bg px-4 py-2.5 text-[13px] leading-relaxed text-warn">
+      <strong className="font-semibold">Truncated attempt.</strong> The agent
+      stopped with <code className="font-mono">{reason}</code> rather than{" "}
+      <code className="font-mono">finished</code>, so the patch and the evidence
+      below may be partial.
     </p>
   );
 }
@@ -176,10 +212,11 @@ export function StopReasonNote({ reason }: { reason: string | null }) {
 export function DegradedNote({ run }: { run: RunResult }) {
   if (!run.degraded) return null;
   return (
-    <p className="rounded-[var(--radius)] border border-warn/40 bg-warn-bg px-3 py-2 text-[12px] text-warn">
+    <p className="rounded-[var(--radius-sm)] border border-warn/30 bg-warn-bg px-4 py-2.5 text-[13px] leading-relaxed text-warn">
       <strong className="font-semibold">Degraded run.</strong>{" "}
-      {run.degraded_reason || "a role was served by a model other than the pinned one"}. Excluded
-      from the headline metric.
+      {run.degraded_reason ||
+        "a role was served by a model other than the pinned one"}
+      . Excluded from the headline metric.
     </p>
   );
 }
@@ -187,9 +224,10 @@ export function DegradedNote({ run }: { run: RunResult }) {
 /** Colourised unified diff. Wrapped in its own scroll box - the page never
  *  scrolls sideways because a patch line was long. */
 export function Diff({ diff }: { diff: string }) {
-  if (!diff.trim()) return <p className="font-mono text-xs text-fg-faint">empty patch</p>;
+  if (!diff.trim())
+    return <p className="font-mono text-xs text-fg-faint">empty patch</p>;
   return (
-    <pre className="scroll-x max-h-[28rem] overflow-y-auto rounded-[var(--radius)] bg-surface-2 p-3 font-mono text-[12px] leading-[1.55]">
+    <pre className="scroll-x max-h-[28rem] overflow-y-auto rounded-[var(--radius-sm)] border border-border bg-surface-2 p-4 font-mono text-[12.5px] leading-[1.6]">
       {diff.split("\n").map((line, i) => {
         const add = line.startsWith("+") && !line.startsWith("+++");
         const del = line.startsWith("-") && !line.startsWith("---");

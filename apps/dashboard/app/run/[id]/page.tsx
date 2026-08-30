@@ -24,7 +24,11 @@ export async function generateStaticParams() {
   return (await loadEntries()).map((e) => ({ id: e.id }));
 }
 
-export default async function RunPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function RunPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
   const entry = await loadEntry(id);
   if (entry === null) notFound();
@@ -33,8 +37,10 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   // as what it is and stop, rather than showing empty suites that read as data.
   if (entry.kind === "failed") {
     return (
-      <div className="mx-auto max-w-[1400px] px-6 py-6">
-        <h1 className="font-mono text-lg font-semibold">{entry.id}</h1>
+      <div className="mx-auto max-w-[1240px] px-8 py-12">
+        <h1 className="font-mono text-[24px] font-semibold tracking-[-0.02em]">
+          {entry.id}
+        </h1>
         <div className="mt-4">
           <Card title="Run failed">
             <VerdictChip verdict="invalid" label="NO RESULT" />
@@ -42,8 +48,9 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
               {entry.run.error}
             </p>
             <p className="mt-3 text-[12px] text-fg-faint">
-              This pair raised before producing a result. It is not a run that scored zero — the
-              two are opposite findings. Re-running the sweep retries it.
+              This pair raised before producing a result. It is not a run that
+              scored zero — the two are opposite findings. Re-running the sweep
+              retries it.
             </p>
           </Card>
         </div>
@@ -56,13 +63,16 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
   const stop = stopReason(r);
 
   return (
-    <div className="mx-auto max-w-[1400px] px-6 py-6">
-      <header className="mb-4 flex flex-wrap items-center justify-between gap-3">
+    <div className="mx-auto max-w-[1240px] px-8 py-12">
+      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-mono text-lg font-semibold tracking-tight">{entry.id}</h1>
-          <p className="mt-0.5 text-[13px] text-fg-muted">
+          <h1 className="font-mono text-[24px] font-semibold tracking-[-0.02em]">
+            {entry.id}
+          </h1>
+          <p className="t-body mt-2">
             {r.case_id} · {r.mode} ·{" "}
-            {r.models.map((m) => `${m.role}=${m.model}`).join(" · ") || "no models recorded"}
+            {r.models.map((m) => `${m.role}=${m.model}`).join(" · ") ||
+              "no models recorded"}
           </p>
         </div>
         <DecisionBadge decision={decide(r)} />
@@ -77,7 +87,11 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           A green visible column beside a red gold column is the whole finding. */}
       <Card
         title="Test suites"
-        aside={<span className="text-[11px] text-fg-faint">visible → verifier → gold</span>}
+        aside={
+          <span className="text-[11px] text-fg-faint">
+            visible → verifier → gold
+          </span>
+        }
         className="mb-4"
       >
         <div className="grid gap-3 md:grid-cols-3">
@@ -97,9 +111,9 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
         </div>
         {r.visible?.passed && r.gold && !r.gold.passed && (
           <p className="mt-3 rounded-[var(--radius)] border border-fail/40 bg-fail-bg px-3 py-2 text-[12px] text-fail">
-            <strong className="font-semibold">Shallow fix.</strong> The visible suite passed while
-            the hidden gold suite failed — the patch satisfied what it could see and not the
-            behaviour.
+            <strong className="font-semibold">Shallow fix.</strong> The visible
+            suite passed while the hidden gold suite failed — the patch
+            satisfied what it could see and not the behaviour.
           </p>
         )}
       </Card>
@@ -109,8 +123,12 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
           <dl className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <Field label="files">{r.patch?.files_changed.length ?? 0}</Field>
             <Field label="lines">
-              <span className="text-[var(--add)]">+{r.patch?.lines_added ?? 0}</span>{" "}
-              <span className="text-[var(--del)]">−{r.patch?.lines_removed ?? 0}</span>
+              <span className="text-[var(--add)]">
+                +{r.patch?.lines_added ?? 0}
+              </span>{" "}
+              <span className="text-[var(--del)]">
+                −{r.patch?.lines_removed ?? 0}
+              </span>
             </Field>
             <Field label="edited a test">
               {/* touched_tests means an EXISTING test changed. Adding one is allowed. */}
@@ -121,7 +139,13 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
               )}
             </Field>
             <Field label="stop reason">
-              {stop === null ? "—" : stop === "finished" ? stop : <span className="text-warn">{stop}</span>}
+              {stop === null ? (
+                "—"
+              ) : stop === "finished" ? (
+                stop
+              ) : (
+                <span className="text-warn">{stop}</span>
+              )}
             </Field>
           </dl>
           {r.patch?.files_changed.length ? (
@@ -192,13 +216,18 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
                 {r.validity && (
                   <div className="rounded-[var(--radius)] bg-surface-2 p-2.5">
                     <div className="mb-1.5 flex items-center gap-2">
-                      <VerdictChip verdict={r.validity.passed ? "pass" : "invalid"} />
+                      <VerdictChip
+                        verdict={r.validity.passed ? "pass" : "invalid"}
+                      />
                       <span className="font-mono text-[11px] text-fg-faint">
-                        compiles={String(r.validity.compiles)} runs={String(r.validity.runs)}{" "}
-                        fails_on_bug={String(r.validity.fails_on_original_bug)}
+                        compiles={String(r.validity.compiles)} runs=
+                        {String(r.validity.runs)} fails_on_bug=
+                        {String(r.validity.fails_on_original_bug)}
                       </span>
                     </div>
-                    <p className="text-[12px] text-fg-muted">{r.validity.reason}</p>
+                    <p className="text-[12px] text-fg-muted">
+                      {r.validity.reason}
+                    </p>
                   </div>
                 )}
               </>
@@ -222,7 +251,8 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
       >
         {r.mutation.length === 0 ? (
           <p className="text-[13px] text-fg-faint">
-            No mutants scored. Baseline runs do not produce a verifier test to score.
+            No mutants scored. Baseline runs do not produce a verifier test to
+            score.
           </p>
         ) : (
           <>
@@ -231,7 +261,9 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
                 <div
                   key={m.mutant_id}
                   className={`rounded-[var(--radius)] border p-2.5 ${
-                    m.scored ? "border-border bg-surface-2" : "border-dashed border-border-strong bg-none-bg"
+                    m.scored
+                      ? "border-border bg-surface-2"
+                      : "border-dashed border-border-strong bg-none-bg"
                   }`}
                 >
                   <div className="mb-1 flex items-center justify-between gap-2">
@@ -245,10 +277,13 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
                       <VerdictChip verdict="none" label="EXCLUDED" />
                     )}
                   </div>
-                  <p className="text-[12px] leading-snug text-fg-muted">{m.description}</p>
+                  <p className="text-[12px] leading-snug text-fg-muted">
+                    {m.description}
+                  </p>
                   {!m.scored && (
                     <p className="mt-1 text-[11px] text-fg-faint">
-                      No in-process test can kill this mutant, so it is kept out of the denominator.
+                      No in-process test can kill this mutant, so it is kept out
+                      of the denominator.
                     </p>
                   )}
                 </div>
@@ -256,8 +291,8 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
             </div>
             {mut.excluded.length > 0 && (
               <p className="mt-3 text-[12px] text-fg-faint">
-                Score is over scored mutants only ({mut.excluded.join(", ")} excluded), matching
-                mutation_results.json.
+                Score is over scored mutants only ({mut.excluded.join(", ")}{" "}
+                excluded), matching mutation_results.json.
               </p>
             )}
           </>
@@ -278,8 +313,9 @@ export default async function RunPage({ params }: { params: Promise<{ id: string
       </div>
 
       <p className="mt-4 text-[12px] text-fg-faint">
-        Runtime {r.runtime_sec.toFixed(1)}s · model cost {costLabel(r)} · SplitSpec merged nothing
-        and approves nothing on its own; every decision here is for a human to review.
+        Runtime {r.runtime_sec.toFixed(1)}s · model cost {costLabel(r)} ·
+        SplitSpec merged nothing and approves nothing on its own; every decision
+        here is for a human to review.
       </p>
     </div>
   );

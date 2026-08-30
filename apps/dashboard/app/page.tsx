@@ -42,43 +42,39 @@ export default async function Home() {
   ).length;
 
   return (
-    <div className="mx-auto max-w-[1400px] px-6 py-6">
-      <header className="mb-5">
-        <h1 className="text-lg font-semibold tracking-tight">Run overview</h1>
-        <p className="mt-0.5 text-[13px] text-fg-muted">
+    <div className="mx-auto max-w-[1240px] px-8 py-12">
+      <header className="mb-10">
+        <h1 className="t-display">Run overview</h1>
+        <p className="t-body mt-2 max-w-[62ch]">
           Every figure below is shown against the number of runs it was computed
           over.
         </p>
       </header>
 
-      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <div className="mb-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card title="Runs on disk">
-          <p className="font-mono text-2xl">{entries.length}</p>
-          <p className="mt-1 text-[11px] text-fg-faint">
+          <p className="t-figure">{entries.length}</p>
+          <p className="t-caption mt-1.5">
             {entries.length - runs.length} failed before producing a result
           </p>
         </Card>
         <Card title="Shallow fixes">
-          <p className="font-mono text-2xl">
+          <p className="t-figure">
             {shallow}
             <span className="text-fg-faint"> / {runs.length}</span>
           </p>
-          <p className="mt-1 text-[11px] text-fg-faint">
-            visible passed, gold failed
-          </p>
+          <p className="t-caption mt-1.5">visible passed, gold failed</p>
         </Card>
         <Card title="Truncated attempts">
-          <p className="font-mono text-2xl">
+          <p className="t-figure">
             {truncated}
             <span className="text-fg-faint"> / {runs.length}</span>
           </p>
-          <p className="mt-1 text-[11px] text-fg-faint">
-            agent stopped before finishing
-          </p>
+          <p className="t-caption mt-1.5">agent stopped before finishing</p>
         </Card>
         <Card title="Model cost">
-          <p className="font-mono text-2xl text-fg-faint">not measured</p>
-          <p className="mt-1 text-[11px] text-fg-faint">
+          <p className="t-figure text-fg-faint">not measured</p>
+          <p className="t-caption mt-1.5">
             agents drop token usage before it reaches the result
           </p>
         </Card>
@@ -98,7 +94,7 @@ export default async function Home() {
         </Card>
       )}
 
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-6">
         {grouped.map(([caseId, group]) => (
           <Card
             key={caseId}
