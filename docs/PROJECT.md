@@ -163,12 +163,37 @@ review", "equivalent to professional QA", "generalizes to all repositories".
 
 ## Improvement changelog
 
-Fill only with experiments actually run. Empty rows stay empty until there is real evidence.
+Every row below cites an artifact or test that ships with this repository. Rows stayed empty
+until there was real evidence for them.
 
 | Stage | What was tried | Why | Evidence | Learning |
 |---|---|---|---|---|
-| Baseline | One coding agent with issue, codebase, visible tests, shell access | Establish a normal workflow | Real runs hit live provider/tool bugs a fake always hides: budget summed resent context every turn, charging the same ~19k transcript 22 times to "use" 205k of 200k and ending runs with `stop_reason=budget` (`artifacts/issue-07-baseline/result.json`); Mistral answered `devstral-small-latest` with HTTP 200 served by `mistral-medium-3-5`, not a 404 | A green unit suite (FakeClient) leaves provider behavior unverified; fixed by pinning `devstral-2512` and preflighting `GET /models` in `run.py::assert_models_exist` | 
-| Iteration 1 | Structured issue contract | Natural-language issues are ambiguous | The contract's own test handed the FakeClient a clean contract and asserted it stayed clean — true by construction, so it fed back exactly what a compromised model would return (`tests/test_contracts.py` L227-231, introduced with the module) | A mock built from your own belief validates nothing; injected `POISONED` feeds since make the test assert against injected output instead | 
-| Iteration 2 | Independent verifier test frozen before judging | Prevent the patch writer from grading itself | The frozen verifier test looked plausible but `token = asyncio.gather(*[client.post(...) ...])` over one event loop serialized the ASGI requests, so there was no real race to catch (`artifacts/live-check-issue-07/verifier_test.py`) | A test that reads as concurrent can still be sequential; the concurrency claim needs verification, not just the word `gather` | 
-| Iteration 3 | Test-validity gate | A test that passes on the bug is useless | The gate flagged exactly that verifier test: it passed on the buggy code — `artifacts/live-check-issue-07/gate_pass/issue-07-gate.sandbox.jsonl` ends exit 0 with ". [100%] 1 passed in 0.00s" — while the fixed test fails it (exit 1) | A green run proves nothing about validity; the gate re-runs the frozen test against the pre-fix code and requires it to fail | 
-| Iteration 4 | Mutation testing | Execution alone does not prove test strength | 8 real runs completed full 4-mutant sweeps in `artifacts/*-splitspec/mutation_results.json`; scores range 1.0 (issues 01,02,03,10) to 0.75 (05,06,09,12 — one surviving mutant each), so the gold verifier test is not always mutation-strong | Execution passing is not a strength measure; a surviving mutant on the frozen verifier for 4 of 8 issues is the concrete signal mutation testing exists to surface | |
+| Baseline | One coding agent with the issue, the codebase, the visible tests, and shell access | Establish the workflow a maintainer already has | Baseline mode returns **REVIEW REQUIRED on 8 of 8** completed runs: with no independent oracle there is nothing to clear a patch with, so a human must read all of them, including the 7 that were correct | A visible suite that already passes cannot distinguish "fixed" from "looks fixed". The baseline is not wrong, it is silent |
+| Iteration 1 | Structured issue contract | Natural-language issues are ambiguous | The contract's own test handed `FakeClient` a clean contract and asserted it stayed clean — true by construction (`tests/test_contracts.py`). Live, issue-11's unreproducible report returns `confidence: low`, and the run escalates instead of patching a non-bug (`artifacts/issue-11-splitspec/result.json`) | A mock built from your own belief validates nothing. Poisoned-response fixtures were added so the test asserts against injected output instead |
+| Iteration 2 | Independent verifier test, frozen and hashed before any patch is judged | Stop the patch writer from grading itself | Frozen `sha256` recorded per run (`artifacts/*-splitspec/verifier_meta.json`); the judge re-hashes and aborts on mismatch. A plausible-looking test used `asyncio.gather` over one event loop, which serialises ASGI requests, so there was no race to catch (`artifacts/live-check-issue-07/verifier_test.py`) | A test that reads as concurrent can still be sequential. The word `gather` is not evidence of concurrency |
+| Iteration 3 | Test-validity gate: the test must compile, run, and **fail on the original bug** | A test that passes on the buggy code would never have caught a shallow fix | The gate rejected exactly that test — `artifacts/live-check-issue-07/gate_pass/issue-07-gate.sandbox.jsonl` ends exit 0, "1 passed", on buggy code. Across the sweep: **8 of 10 valid**; issue-09's test was rejected for passing on the bug, issue-11 has no seeded bug to catch | A green run proves nothing about validity. Gate rejects toothless tests automatically — this is the component that most clearly works |
+| Iteration 4 | Mutation scoring of the frozen test against known-incorrect variants | Execution is not discrimination | **24 of 40** scored mutants killed. Two verifier tests killed **nothing** (issues 09 and 11), while issues 03 and 10 killed all four (`artifacts/*-splitspec/mutation_results.json`) | Validity and strength are different properties. A test can pass the gate and still have no discriminatory power; only mutation scoring separates them |
+| Iteration 5 | Fixed the harness's own diff generation | The measurement was wrong, not the models | `difflib` omits the "no newline at end of file" marker, and **11 of 13 fixture files lack a trailing newline**, so applying a patch silently deleted each edited file's last line — corrupting **21 of 22 runs**. Same model, same patch, issue-10: gold **FAIL 1/5 → PASS 5/5** once the diff was well-formed (`tests/test_sandbox.py::test_patch_round_trip_keeps_a_last_line_with_no_trailing_newline`) | This inverted the conclusion. Before the fix SplitSpec looked strictly worse than baseline; after it, it clears 7 correct patches with zero false rejections. Round-trip tests were green throughout because they only ever round-tripped files that ended with a newline |
+| Final | Contract → (fixer ‖ verifier) → freeze → gate → judge → mutation | Combine the changes that held up | **7 of 9** correct patches auto-cleared, **0** false rejections, **1** broken patch cleared (issue-05), 2 escalated. Human reviews required: **9 → 2**. Median runtime 264s → 391s | Verification earns its cost when it *clears* work, not only when it blocks it. The remaining gap is oracle strength: the verifier missed the one shallow fix it was given |
+
+### Removed / not adopted
+
+- **Cross-model fallback.** A run whose fixer silently changed mid-sweep cannot support a result
+  table, so a missing provider now fails the run instead of substituting one. `degraded` remains
+  in the schema and is reported, never averaged in.
+- **A GitHub bot.** No measurement supports running this on every PR yet, and a bot needs
+  credentials a judge cannot be given — which would make the result *less* reproducible, not more.
+
+### Main failure mode
+
+The verifier generated a valid, gate-passing test for issue-05 (an IDOR case) that **passed on a
+broken patch**, turning a cautious REVIEW REQUIRED into a confident ACCEPT. Published work predicts
+this: 80.2% of agent-authored test patches carry weak or no oracle signal, and strong-oracle rates
+range from 18% to 67% by model ([All Smoke, No Alarm](https://arxiv.org/html/2606.18168v1)). The
+verifier here is a small, fast model at the low end of that range.
+
+The change that follows directly from this evidence, and that we would make next: **a passing
+verifier test must never upgrade a verdict.** Only a failing one carries signal. Absence of a
+caught bug is not evidence of correctness.
+
+See `docs/HOT_TAKE.md` for the broader lesson.

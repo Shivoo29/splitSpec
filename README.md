@@ -37,7 +37,7 @@ Four stages with an enforced information boundary between them:
 | **Contract builder** | The issue text, a file listing | The patch, any test |
 | **Fixer** | The contract, the pre-patch repo, the visible tests | The verifier's test, the gold tests |
 | **Verifier** | The contract, the pre-patch repo | The patch, the fixer's workspace, the gold tests |
-| **Judge** | The patch, all three suites | — calls no model, infers nothing |
+| **Judge** | The patch, all three suites | - calls no model, infers nothing |
 
 The boundary is **structural, not prompted**. The fixer and verifier run in separate
 materialised workspaces; each asserts at entry that the other's artifacts are unreachable and
@@ -52,60 +52,107 @@ counted.
 
 ## Results
 
-Measured from real runs in `artifacts/` - Docker sandbox, `--network none`, real models. No
-figure below is simulated.
+Measured from real runs in `artifacts/` - Docker sandbox, `--network none`, real models. No figure
+below is simulated.
 
 **Models:** contract `openai/gpt-oss-120b` (Groq) · fixer `devstral-2512` (Mistral) · verifier
-`gemini-3.1-flash-lite` (Google). Fixer and verifier are different models on different
-providers.
+`gemini-3.1-flash-lite` (Google). Fixer and verifier are different models on different providers.
 
 **Test suite:** 175 unit tests + 17 Docker end-to-end tests pass, 1 skipped.
 
-**Gold-oracle validation** - every seeded bug is caught by its gold suite, and case 11 (no
-seeded bug) passes, across all 12 cases with zero errors:
+**Oracle validation.** The gold suites are checked in both directions across all 12 cases, with
+zero errors - they fail on every seeded bug and pass on the clean fixture. Without both halves, a
+gold suite cannot distinguish a fix from a non-fix and every metric built on it is meaningless.
 
-| | visible on buggy code | gold on buggy code |
+| | gold on buggy code | gold on clean code |
 |---|---|---|
-| issues 01–09, 12 | pass | **fail** |
-| issue 10 (inverted by design) | **fail** | fail |
-| issue 11 (no bug) | pass | pass |
+| all 12 cases | **fails** (11 seeded bugs) / passes (issue-11, no bug) | **passes, 12/12** |
 
-**Sweep, 12 cases × 2 modes.** Partial: 7 of 24 pairs failed on provider read timeouts and are
-pending re-run. Every rate is reported with its denominator.
+**Sweep, 12 cases × 2 modes.** 18 of 24 pairs completed; 6 failed on provider read timeouts on
+free-tier endpoints and are excluded. Every rate carries its denominator.
+
+| case | baseline | gold | SplitSpec | gold | verifier |
+|---|---|---|---|---|---|
+| issue-02 | REVIEW REQUIRED | pass | **ACCEPT** | pass | pass |
+| issue-03 | REVIEW REQUIRED | pass | **ACCEPT** | pass | pass |
+| issue-04 | REVIEW REQUIRED | pass | **ACCEPT** | pass | pass |
+| issue-05 | REVIEW REQUIRED | **fail** | ACCEPT | **fail** | pass |
+| issue-06 | REVIEW REQUIRED | pass | **ACCEPT** | pass | pass |
+| issue-08 | REVIEW REQUIRED | pass | **ACCEPT** | pass | pass |
+| issue-09 | timeout | - | ESCALATE | pass | - |
+| issue-10 | REVIEW REQUIRED | pass | **ACCEPT** | pass | pass |
+| issue-11 | timeout | - | ESCALATE | pass | - |
+| issue-12 | REVIEW REQUIRED | pass | **ACCEPT** | pass | pass |
+
+### Primary outcome: reviewer effort
+
+Success for a maintainer is how many patches they must read by hand.
+
+| Metric | Baseline | SplitSpec | Change |
+|---|---|---|---|
+| Correct patches auto-cleared | 0 / 9 | **7 / 9** | +7 |
+| False rejections | 0 | **0** | - |
+| Broken patches cleared | 0 | 1 | +1 |
+| **Human reviews required** | **9** | **2** | **−78%** |
+| Median runtime per issue | 264 s | 391 s | +127 s |
+| Model cost | not measured | not measured | - |
+
+The baseline cannot clear anything: with no independent oracle, every patch returns
+REVIEW REQUIRED - including the seven that were correct. SplitSpec clears seven of them with no
+false rejections, and escalates two low-confidence cases. The cost is roughly two minutes of
+machine time per patch.
+
+### Secondary metrics, and the one that failed
 
 | Metric | Value | Denominator |
 |---|---|---|
-| False-fix detection recall | **0 / 2** | shallow fixes with a verifier verdict |
-| Generated test validity rate | **7 / 7** | tests that reached the gate |
-| Mutation score (pooled) | **25 / 28** | scored mutants |
-| Median runtime, baseline | 293 s | 7 completed runs |
-| Median runtime, splitspec | 287 s | 8 completed runs |
-| Model cost | **not measured** | agent loops drop token usage before it reaches the result |
+| Generated test validity rate | 8 / 10 | tests that reached the gate |
+| Mutation score (pooled) | 24 / 40 | scored mutants |
+| **False-fix detection recall** | **0 / 1** | shallow fixes with a verifier verdict |
 
-### The honest result
+**The verifier missed the one shallow fix it was given.** On issue-05 (an IDOR case) the patch
+passed the visible suite, failed the gold suite, and the verifier test *passed* - turning a
+cautious REVIEW REQUIRED into a confident ACCEPT. One case is not a rate, and the honest reading is
+that the oracle-strength question is unresolved here, not answered.
 
-**The verifier did not catch either shallow fix it was given.** On issues 05 and 10 the fixer's
-patch passed the visible suite, failed the gold suite, and the independent verifier test
-*passed* — so SplitSpec returned ACCEPT on two patches the hidden oracle says are broken. That
-is a false accept, twice, and it is the central claim of this project not being supported on
-the cases measured so far.
+Published work predicts exactly this failure: 80.2% of agent-authored test patches carry weak or no
+oracle signal, and strong-oracle rates range from 18% to 67% depending on the model
+([All Smoke, No Alarm](https://arxiv.org/html/2606.18168v1)). The verifier used here is a small,
+fast model at the low end of that range.
 
-Two things should be separated from that:
+Two verifier tests also killed **zero** mutants (issues 09 and 11) while passing or being correctly
+gated - validity and discriminatory power are separate properties, and only mutation scoring
+separates them.
 
-- **The validity gate works.** Seven of seven generated tests compiled, ran, and failed on the
-  original bug. An earlier run on issue-07 produced a plausible-looking test using
-  `asyncio.gather` over a single event loop - which serialises ASGI requests, so there was no
-  race to catch — and the gate correctly rejected it as non-discriminating. The gate accepts
-  good tests and rejects toothless ones.
-- **The generated tests have real discriminatory power** where they exist: 25 of 28 scored
-  mutants killed, against 0 for a deliberately trivial test.
+### The iteration that mattered most
 
-So the machinery works and the hypothesis is, on this evidence, unconfirmed. A generated test
-can be valid, kill mutants, and still miss the specific shallow fix in front of it. See
-`docs/PROJECT.md` for the improvement changelog and `docs/HOT_TAKE.md` for what we would build
-differently.
+`difflib` omits the "no newline at end of file" marker, and 11 of 13 fixture files lack a trailing
+newline - so applying a patch silently deleted each edited file's last line, corrupting **21 of 22
+runs** in the first sweep. Same model, same patch, issue-10 went from gold **1/5 failing** to
+**5/5 passing** once the diff was well-formed.
+
+Before that fix, SplitSpec looked strictly worse than the baseline. After it, it clears seven
+correct patches with zero false rejections. The harness's own round-trip tests were green
+throughout, because they only ever round-tripped files that ended with a newline. See
+`docs/PROJECT.md` for the full changelog and `docs/HOT_TAKE.md` for the lesson.
 
 ## Reproduction
+
+**The fastest path - reproduce the published result with no API keys, in seconds:**
+
+```bash
+python -m venv .venv && .venv/bin/pip install -r requirements.txt
+.venv/bin/python -m splitspec.report --from artifacts/
+```
+
+That recomputes every number in the Results section from the run artifacts committed
+to this repository. No provider keys, no Docker, no cost. It is the reproduction path
+because the models are not deterministic: running the sweep yourself produces *your*
+numbers, while this reproduces *ours*, from the evidence they were derived from.
+
+Add `--output artifacts/evaluation-results.json` to write the table to disk.
+
+**To re-run the pipeline yourself**, which needs credentials and a few hours:
 
 Tested on Python 3.13.14, Docker 29.7.2, Linux. Model ids are pinned exactly, never by a
 `-latest` alias - a floating alias means a sweep cannot be reproduced.
