@@ -116,10 +116,24 @@ def _modified_existing_tests(diff: str, workspace: Workspace) -> list[str]:
     return touched
 
 
+#: Notes are a human-readable label on the patch, not a transcript. A model that
+#: degenerates into a repetition loop and stops on `length` returns its entire
+#: 8000-token reply as the final message; storing that verbatim put 39k characters
+#: into result.json, the review packet, the dashboard, and the operator's terminal.
+#: The full reply is already in trajectory.jsonl, which is where a transcript belongs.
+_MAX_NOTE_CHARS = 600
+
+
 def _notes(stop_reason: str, final_message: str) -> str:
     note = f"stop_reason={stop_reason}"
-    if final_message:
-        note += f"; {final_message}"
+    message = " ".join(final_message.split())
+    if message:
+        if len(message) > _MAX_NOTE_CHARS:
+            message = (
+                f"{message[:_MAX_NOTE_CHARS]}... "
+                f"[truncated, {len(final_message)} chars; full reply in trajectory.jsonl]"
+            )
+        note += f"; {message}"
     return note
 
 

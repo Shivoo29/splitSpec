@@ -12,7 +12,7 @@ import pytest
 import yaml
 
 from splitspec import sandbox
-from splitspec.agents.fixer import run_fixer
+from splitspec.agents.fixer import _notes, run_fixer
 from splitspec.config import ROOT, Provider, Settings
 from splitspec.llm import FakeClient, ModelReply, ToolCall
 from splitspec.schemas import Case, Confidence, IssueContract
@@ -366,3 +366,24 @@ def test_sandbox_trace_is_not_written_into_the_host_workspace(tmp_path):
     assert not (ws.path / "sandbox.jsonl").exists()
     assert (ws.path.parent / f"{ws.path.name}.sandbox.jsonl").exists()
     assert "sandbox.jsonl" not in ws.snapshot_diff()
+
+
+def test_notes_do_not_embed_a_whole_runaway_reply(tmp_path):
+    """Patch notes are a label, not a transcript.
+
+    A model that degenerates into a repetition loop stops on `length` and returns
+    its entire per-reply allowance as the final message. Storing that verbatim put
+    39k characters into result.json, the review packet, the dashboard, and the
+    operator's terminal - all to say "stop_reason=length". The full reply is
+    already in trajectory.jsonl.
+    """
+    rambling = "The solution is a unique constraint. But wait, that will not work. " * 600
+    note = _notes("length", rambling)
+
+    assert note.startswith("stop_reason=length; ")
+    assert len(note) < 1000, "a runaway reply leaked into the patch notes"
+    assert "truncated" in note and str(len(rambling)) in note
+    # A short message is still recorded in full.
+    assert _notes("finished", "added a unique constraint") == (
+        "stop_reason=finished; added a unique constraint"
+    )
