@@ -4,6 +4,12 @@ mutants:
     description: "original bug: DB unique constraint removed, check-then-insert has race window"
   - id: m07-2
     description: "obvious-path-only fix: adds a process-local lock that fails under multiple workers"
+    # A threading.Lock genuinely serializes the race inside ONE process, and every
+    # oracle here (gold included) runs threads in a single process. So no in-process
+    # test can kill this mutant - it measures the harness, not the test. It is still
+    # run and reported, but excluded from the score denominator: leaving it in caps
+    # every possible score at 0.8 and makes a perfect test look like it missed one.
+    in_process_killable: false
   - id: m07-3
     description: "sequential-only fix: uses SELECT FOR UPDATE which SQLite doesn't fully support"
   - id: m07-4

@@ -41,6 +41,7 @@ from splitspec.gate import gate
 from splitspec.judge import judge
 from splitspec.llm import ModelClient
 from splitspec.mutation import score_mutants
+from splitspec.reporting import decide, render_packet
 from splitspec.schemas import (
     Case,
     IssueContract,
@@ -250,6 +251,7 @@ def _report_node(ctx: GraphContext, state: RunState) -> dict[str, Any]:
     result.degraded = bool(state.get("degraded", False))
     result.degraded_reason = state.get("degraded_reason", "")
 
+    result.decision = decide(result, case)
     _write_packet(ctx, state, result)
     (ctx.artifact_dir / "result.json").write_text(
         result.model_dump_json(indent=2) + "\n", encoding="utf-8"
@@ -327,44 +329,15 @@ def _write_text_artifacts(ctx: GraphContext, state: RunState) -> None:
 
 
 def _write_packet(ctx: GraphContext, state: RunState, result: RunResult) -> None:
-    """Minimal review packet stub (fully rendered by Module 11)."""
+    """Render the §14 review packet (Module 11) into the artifact directory."""
     d = ctx.artifact_dir
-    lines = [
-        f"# SplitSpec Review Packet - Issue {state['case'].id}",
-        "",
-        "## Decision",
-        result.decision,
-        "",
-        "## Issue",
-        state["case"].title,
-        "",
-        "## Candidate patch",
-        f"- Files changed: {', '.join(result.patch.files_changed) if result.patch else 'n/a'}",
-        "",
-        "## Visible tests",
-        _suite_line(result.visible),
-        "",
-        "## Gold hidden evaluator",
-        _suite_line(result.gold),
-        "",
-        "## Residual risks",
-        "- Full review packet rendering lands with Module 11.",
-    ]
-    (d / "review_packet.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
-
-
-def _suite_line(run: TestRun | None) -> str:
-    if run is None:
-        return "n/a"
-    verdict = "PASS" if run.passed else "FAIL"
-    return f"{verdict} - {run.total} tests, {run.failures} failed, {run.errors} errors"
+    text = render_packet(result, state["case"], ctx.settings)
+    (d / "review_packet.md").write_text(text, encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
 # Graph construction
 # ---------------------------------------------------------------------------
-
-
 def _state_graph(ctx: GraphContext, mode: Mode):
     """Build the state graph for ``mode`` over the shared node closures."""
     g = StateGraph(RunState)

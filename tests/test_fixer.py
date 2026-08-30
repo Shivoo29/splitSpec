@@ -212,7 +212,9 @@ def test_budget_stop_is_recorded_in_patch_notes(tmp_path):
                     )
                 ],
                 input_tokens=60,
-                output_tokens=60,
+                # The budget counts GENERATED tokens: one reply must exceed it on
+                # its own, since resent context no longer consumes the allowance.
+                output_tokens=120,
             ),
             _reply(tool_calls=[_finish_call("should never be reached")]),
         ]

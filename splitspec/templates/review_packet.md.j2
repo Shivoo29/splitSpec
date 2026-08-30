@@ -1,0 +1,70 @@
+# SplitSpec Review Packet — Issue {{ case.id }}
+
+## Decision
+{{ packet.decision }}
+
+Decision inputs:
+- Contract confidence: {{ packet.confidence }}
+- Expect escalation (case rule): {{ packet.expect_escalation }}
+- Visible tests: {{ packet.visible_verdict }} (ran: {{ packet.visible_ran }})
+- Verifier test: {{ packet.verifier_verdict }} (valid: {{ packet.verifier_valid }}; ran: {{ packet.verifier_ran }})
+- Patch edited an existing test: {{ packet.touched_tests }}
+
+## Issue
+{{ case.title }}
+
+{{ packet.issue_text }}
+{% if packet.out_of_scope %}
+- Out of scope: {{ packet.out_of_scope }}
+{% endif %}
+
+## Behavioral invariant
+{% if packet.invariants %}
+{% for inv in packet.invariants %}- {{ inv }}
+{% endfor %}{% else %}None captured — the contract was not produced (or was unreadable).{% endif %}
+
+## Candidate patch
+- Files changed: {{ packet.files_changed }}
+- Patch size: +{{ packet.lines_added }}/-{{ packet.lines_removed }} lines
+- Stop reason: {{ packet.stop_reason }}
+- Patch notes: {{ packet.patch_notes }}
+
+## Visible tests
+{{ packet.visible_line }}
+{% if packet.visible_tail %}
+```
+{{ packet.visible_tail }}
+```
+{% endif %}
+
+## Independent verifier test
+{{ packet.verifier_line }}
+{% if packet.verifier_invariant %}- Invariant: {{ packet.verifier_invariant }}
+{% endif %}{% if packet.verifier_assumptions %}
+- Assumptions:
+{% for a in packet.verifier_assumptions %}  - {{ a }}
+{% endfor %}{% endif %}
+- Validity: {{ packet.validity_note }}
+
+## Gold hidden evaluator
+{{ packet.gold_line }}
+
+## Mutation sensitivity
+{{ packet.mutation_note }}
+{% if packet.mutation_items %}
+- Killed: {{ packet.mutation_killed }}/{{ packet.mutation_denominator }}
+{% endif %}
+
+## Residual risks
+{% for r in packet.residual_risks %}- {{ r }}
+{% endfor %}
+
+- Independence note: {{ packet.independence_note }}
+- Model cost is not measured in this build (the agent loops drop token usage), so no cost is reported here.
+- This is advisory evidence, not an approval. A human must review it.
+
+## Human action
+{{ packet.human_action }}
+
+SplitSpec merged nothing and approves nothing on its own — every decision above is
+recommendation only, and a human must review the evidence before any merge or deploy.

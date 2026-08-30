@@ -148,15 +148,26 @@ def score_mutants(
                 description=entry.get("description", ""),
                 killed=killed,
                 detail=detail,
+                scored=entry.get("in_process_killable") is not False,
             )
         )
 
-    killed_count = sum(1 for r in results if r.killed)
-    denominator = len(results)
-    # Missing data is None, never 0: an empty manifest has no measurable score.
+    # A mutant flagged in_process_killable: false is one NO test in this harness can
+    # kill - issue-07's m07-2 adds a threading.Lock, which genuinely serializes the
+    # race inside the single process every oracle here runs in. Counting it would cap
+    # every achievable score below 1.0 and make a perfect test look like it missed
+    # one, so it is run and reported but kept out of the denominator.
+    excluded = {r.mutant_id for r in results if not r.scored}
+    scored = [r for r in results if r.scored]
+
+    killed_count = sum(1 for r in scored if r.killed)
+    denominator = len(scored)
+    # Missing data is None, never 0: nothing scorable means no measurable score.
     score = killed_count / denominator if denominator else None
 
-    _write_results(frozen_test_dir, score, killed_count, denominator, results)
+    _write_results(
+        frozen_test_dir, score, killed_count, denominator, results, sorted(excluded)
+    )
 
     trace.event(
         "mutation", "score",
@@ -166,6 +177,7 @@ def score_mutants(
         denominator=denominator,
         score=score,
         mutants=[r.mutant_id for r in results],
+        excluded_unkillable=sorted(excluded),
     )
     return results
 
@@ -176,12 +188,16 @@ def _write_results(
     killed: int,
     denominator: int,
     results: list[MutationResult],
+    excluded: list[str],
 ) -> None:
     """Persist ``mutation_results.json`` (PROJECT.md §13) with score + denominator."""
     doc = {
         "score": score,
         "killed": killed,
         "denominator": denominator,
+        # Reported, never silently dropped: a reader must be able to see which
+        # mutants the score could not have been asked to kill, and why.
+        "excluded_unkillable": excluded,
         "results": [r.model_dump(mode="json") for r in results],
     }
     path = frozen_test_dir / MUTATION_RESULTS_FILENAME

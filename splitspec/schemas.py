@@ -111,6 +111,11 @@ class MutationResult(BaseModel):
     description: str
     killed: bool
     detail: str = ""
+    # False for a mutant the manifest flags as unkillable in this harness (a
+    # process-local lock genuinely fixes a race inside a single-process test).
+    # It is still run and reported, but counting it would cap every achievable
+    # score below 1.0 and make a perfect test look like it missed one.
+    scored: bool = True
 
 
 class ModelUse(BaseModel):

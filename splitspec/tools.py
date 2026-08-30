@@ -423,8 +423,15 @@ def run_agent(
     api_tools = [t.as_api_schema() for t in tools]
     made: list[dict] = []
 
+    # The budget counts GENERATED tokens, not billed tokens. Every turn resends the
+    # whole transcript, so summing each reply's input_tokens charges the same context
+    # again on every turn: a real run reached turn 22 with a 19k transcript having
+    # "used" 205k of a 200k budget. That terminates agents on an accounting artifact
+    # rather than on work done, and it makes the results measure the budget instead
+    # of the model. Billed totals are still recorded in full on model_use, which is
+    # what the cost metric reads; _MAX_TURNS remains the leash on a runaway loop.
     token_budget = settings.max_tokens_per_agent
-    tokens_used = 0
+    tokens_generated = 0
     start = clock()
 
     stop_reason = STOP_FINISHED
@@ -432,10 +439,12 @@ def run_agent(
 
     for _turn in range(_MAX_TURNS):
         elapsed = clock() - start
-        if tokens_used >= token_budget or elapsed >= settings.agent_timeout_sec:
+        if tokens_generated >= token_budget or elapsed >= settings.agent_timeout_sec:
             stop_reason = STOP_BUDGET
             trace.event(
-                role, "budget", reason="budget_exceeded", tokens_used=tokens_used,
+                role, "budget", reason="budget_exceeded",
+                tokens_generated=tokens_generated,
+                billed_tokens=model_use.input_tokens + model_use.output_tokens,
                 token_budget=token_budget, elapsed_sec=round(elapsed, 3),
             )
             break
@@ -445,12 +454,12 @@ def run_agent(
         # single turn eat everything. Never ask for more than the run has left.
         reply = client.respond(
             system=system_prompt, messages=messages, tools=api_tools,
-            max_tokens=max(1, min(_MAX_TOKENS_PER_REPLY, token_budget - tokens_used)),
+            max_tokens=max(1, min(_MAX_TOKENS_PER_REPLY, token_budget - tokens_generated)),
         )
         model_use.calls += 1
         model_use.input_tokens += reply.input_tokens
         model_use.output_tokens += reply.output_tokens
-        tokens_used += reply.input_tokens + reply.output_tokens
+        tokens_generated += reply.output_tokens
         trace.event(
             role, "model_call", model=reply.model, input_tokens=reply.input_tokens,
             output_tokens=reply.output_tokens, finish_reason=reply.finish_reason,
@@ -517,7 +526,8 @@ def run_agent(
 
     trace.event(
         role, "agent_end", stop_reason=stop_reason, final_message_len=len(final_message),
-        calls=model_use.calls, tokens_used=tokens_used,
+        calls=model_use.calls, tokens_generated=tokens_generated,
+        billed_tokens=model_use.input_tokens + model_use.output_tokens,
     )
     return AgentResult(
         final_message=final_message,

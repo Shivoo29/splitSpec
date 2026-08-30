@@ -201,7 +201,9 @@ def test_token_budget_cuts_the_loop_off(tmp_path):
             _reply(
                 tool_calls=[ToolCall(id="c1", name="list_files", arguments="{}")],
                 input_tokens=60,
-                output_tokens=60,
+                # The budget counts GENERATED tokens: one reply must exceed it on
+                # its own, since resent context no longer consumes the allowance.
+                output_tokens=120,
             ),
             _reply(tool_calls=[_finish_call("never reached")]),
         ]
@@ -516,3 +518,34 @@ def test_per_reply_max_tokens_is_not_the_whole_run_budget(tmp_path):
     asked = client.respond_calls[0]["max_tokens"]
     assert asked < settings.max_tokens_per_agent
     assert asked <= 8000
+
+
+def test_resent_context_does_not_consume_the_budget(tmp_path):
+    """A huge prompt must not exhaust the run budget on its own.
+
+    Every turn resends the whole transcript, so charging each reply's input_tokens
+    to the budget bills the same context again on every turn. A real run reached
+    turn 22 with a 19k transcript having "used" 205k of a 200k budget - the agent
+    was stopped by an accounting artifact, not by work done, which makes the
+    experiment measure the budget instead of the model. Billed totals still land
+    on model_use for the cost metric.
+    """
+    ws = _host_workspace(tmp_path)
+    settings = _settings(max_tokens_per_agent=100)
+    client = FakeClient(
+        replies=[
+            _reply(
+                tool_calls=[ToolCall(id="c1", name="list_files", arguments="{}")],
+                input_tokens=50_000,
+                output_tokens=10,
+            ),
+            _reply(tool_calls=[_finish_call("reached")]),
+        ]
+    )
+    result = run_agent(
+        "be a fixer", default_tools(), ws, client, settings, _trace(tmp_path), "fixer"
+    )
+    assert result.stop_reason == STOP_FINISHED, "resent context ate the budget"
+    assert result.model_use.calls == 2
+    # Billed usage is still recorded in full; only the budget ignores resent input.
+    assert result.model_use.input_tokens >= 50_000

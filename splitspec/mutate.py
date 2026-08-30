@@ -29,7 +29,7 @@ import yaml
 
 from splitspec.config import load_dotenv
 from splitspec.freeze import freeze
-from splitspec.mutation import score_mutants
+from splitspec.mutation import MUTATION_RESULTS_FILENAME, score_mutants
 from splitspec.schemas import Case, Confidence, VerifierTest
 from splitspec.trace import Trace
 
@@ -82,19 +82,19 @@ def main(
     # Throwaway workspace root; each mutant gets its own dir under it.
     ws_tmp = Path(tempfile.mkdtemp(prefix="splitspec-mutate-ws-"))
     try:
-        results = score_mutants(case_obj, frozen_dir, ws_tmp, trace)
+        score_mutants(case_obj, frozen_dir, ws_tmp, trace)
     finally:
         shutil.rmtree(ws_tmp, ignore_errors=True)
 
-    killed = sum(1 for r in results if r.killed)
-    denominator = len(results)
-    score = killed / denominator if denominator else None
+    # Read the score score_mutants already computed rather than recomputing it here.
+    # A second computation drifts: this one counted every mutant, including the ones
+    # the manifest flags as unkillable in-process, so the CLI printed 0.8 for the very
+    # test whose mutation_results.json said 1.0.
     doc = {
         "case": case_obj.id,
-        "score": score,
-        "killed": killed,
-        "denominator": denominator,
-        "results": [r.model_dump(mode="json") for r in results],
+        **json.loads(
+            (frozen_dir / MUTATION_RESULTS_FILENAME).read_text(encoding="utf-8")
+        ),
     }
     output.write_text(json.dumps(doc, indent=2) + "\n", encoding="utf-8")
     print(json.dumps(doc, indent=2, default=str))

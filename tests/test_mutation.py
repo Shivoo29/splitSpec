@@ -145,9 +145,18 @@ def test_score_written_to_mutation_results_json_with_denominator(tmp_path):
         runner=_runner(_exec("1 failed in 0.1s", exit_code=1), *(_exec("1 passed") for _ in range(4))),
     )
     doc = json.loads((frozen_dir / MUTATION_RESULTS_FILENAME).read_text(encoding="utf-8"))
-    assert doc["denominator"] == 5
+    assert doc["denominator"] == 4, (
+        "issue-07's m07-2 is flagged in_process_killable: false - a threading.Lock "
+        "genuinely fixes the race inside the single process every oracle here runs "
+        "in, so no test can kill it and it must not cap the achievable score"
+    )
+    assert doc["excluded_unkillable"] == ["m07-2"]
+    # It is still RUN and reported, never silently dropped from the record.
+    assert [r["mutant_id"] for r in doc["results"]] == [
+        "m07-1", "m07-2", "m07-3", "m07-4", "m07-5",
+    ]
     assert doc["killed"] == 1
-    assert doc["score"] == 1 / 5
+    assert doc["score"] == 1 / 4
     assert len(doc["results"]) == 5
 
 
