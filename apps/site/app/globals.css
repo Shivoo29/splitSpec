@@ -1,0 +1,198 @@
+@import "tailwindcss";
+
+/* Type: the system UI stack, which resolves to SF Pro on Apple platforms and to
+   the platform's own humanist sans elsewhere. Nothing is downloaded, so the page
+   is correct with no network and there is no font-swap reflow. A monospace face
+   is reserved for anything the harness emitted verbatim - ids, diffs, counts,
+   pytest output - so machine text is always distinguishable from prose. */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces. The page is off-white and cards are pure white, so a card reads as
+     lifted without needing a shadow to say so. */
+  --bg: #fbfbfd;
+  --surface: #ffffff;
+  --surface-2: #f5f5f7;
+  --border: #e3e3e6;
+  --border-strong: #c7c7cc;
+
+  /* Text. Three weights of emphasis, all >= 4.5:1 on their surface. */
+  --fg: #1d1d1f;
+  --fg-muted: #52525b;
+  --fg-faint: #86868b;
+
+  --accent: #0066cc;
+  --accent-fg: #ffffff;
+
+  /* Status. Deliberately the only saturated colour on the page: the green-visible
+     beside red-gold comparison is the finding, so nothing else competes with it. */
+  --pass: #147a3d;
+  --pass-bg: #e8f6ed;
+  --fail: #c4271b;
+  --fail-bg: #fdecea;
+  --warn: #9a5b00;
+  --warn-bg: #fdf3e3;
+  --none: #86868b;
+  --none-bg: #f0f0f2;
+
+  --add: #147a3d;
+  --del: #c4271b;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --rail: 264px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+
+    --bg: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --border: #38383a;
+    --border-strong: #545458;
+
+    --fg: #f5f5f7;
+    --fg-muted: #aeaeb2;
+    --fg-faint: #8e8e93;
+
+    --accent: #2997ff;
+    --accent-fg: #000000;
+
+    /* Tonal variants, not the light values inverted: the light green and red both
+       fail contrast against a near-black surface. */
+    --pass: #30d158;
+    --pass-bg: #10281a;
+    --fail: #ff6961;
+    --fail-bg: #2e1514;
+    --warn: #ffd426;
+    --warn-bg: #2b2205;
+    --none: #8e8e93;
+    --none-bg: #26262a;
+
+    --add: #30d158;
+    --del: #ff6961;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-fg-faint: var(--fg-faint);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-pass: var(--pass);
+  --color-pass-bg: var(--pass-bg);
+  --color-fail: var(--fail);
+  --color-fail-bg: var(--fail-bg);
+  --color-warn: var(--warn);
+  --color-warn-bg: var(--warn-bg);
+  --color-none: var(--none);
+  --color-none-bg: var(--none-bg);
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Inter, Roboto,
+    "Helvetica Neue", Arial, sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", SFMono-Regular, Menlo, "JetBrains Mono", Consolas,
+    monospace;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  /* Counts, durations and ids sit in columns; proportional digits jitter between
+     rows and make a table look misaligned even when it is not. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Display type. Apple's headline treatment is size and negative tracking, not
+   weight: a large semibold at -0.02em reads as confident, a large bold reads as
+   loud. Tracking tightens as size grows, which is why it is per-step. */
+.t-display {
+  font-size: clamp(1.75rem, 1.2rem + 1.8vw, 2.5rem);
+  line-height: 1.1;
+  letter-spacing: -0.021em;
+  font-weight: 600;
+}
+.t-title {
+  font-size: 1.3125rem;
+  line-height: 1.25;
+  letter-spacing: -0.014em;
+  font-weight: 600;
+}
+.t-section {
+  font-size: 0.6875rem;
+  line-height: 1.3;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 590;
+  color: var(--fg-faint);
+}
+.t-body {
+  font-size: 0.9375rem;
+  line-height: 1.6;
+  color: var(--fg-muted);
+}
+.t-caption {
+  font-size: 0.75rem;
+  line-height: 1.45;
+  color: var(--fg-faint);
+}
+/* One numeric style for every headline figure, so a metric is recognisable as a
+   metric wherever it appears. */
+.t-figure {
+  font-size: 2rem;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  font-weight: 590;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Wide content - diffs, pytest output, tables - scrolls inside its own box. The
+   page body must never scroll sideways. */
+.scroll-x {
+  overflow-x: auto;
+  max-width: 100%;
+  overscroll-behavior-x: contain;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:where(a, button, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+/* One motion token. Every transition on the page uses it, so the interface has a
+   single rhythm rather than a different feel per component. */
+:where(a, button, tr, .card) {
+  transition:
+    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
