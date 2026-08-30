@@ -15,7 +15,7 @@ A maintainer reviewing a patch produced by a coding agent, on a repository with 
 suite and no curated hidden tests.
 
 **The bottleneck is who gets to decide what "done" means.** In the usual workflow the agent
-that writes the patch is also the thing that decides the patch is finished — it stops when the
+that writes the patch is also the thing that decides the patch is finished - it stops when the
 visible tests go green. A shallow fix that satisfies the visible suite without fixing the
 behaviour is therefore indistinguishable, at review time, from a correct one. Both arrive
 green.
@@ -52,7 +52,7 @@ counted.
 
 ## Results
 
-Measured from real runs in `artifacts/` — Docker sandbox, `--network none`, real models. No
+Measured from real runs in `artifacts/` - Docker sandbox, `--network none`, real models. No
 figure below is simulated.
 
 **Models:** contract `openai/gpt-oss-120b` (Groq) · fixer `devstral-2512` (Mistral) · verifier
@@ -61,7 +61,7 @@ providers.
 
 **Test suite:** 175 unit tests + 17 Docker end-to-end tests pass, 1 skipped.
 
-**Gold-oracle validation** — every seeded bug is caught by its gold suite, and case 11 (no
+**Gold-oracle validation** - every seeded bug is caught by its gold suite, and case 11 (no
 seeded bug) passes, across all 12 cases with zero errors:
 
 | | visible on buggy code | gold on buggy code |
@@ -94,7 +94,7 @@ Two things should be separated from that:
 
 - **The validity gate works.** Seven of seven generated tests compiled, ran, and failed on the
   original bug. An earlier run on issue-07 produced a plausible-looking test using
-  `asyncio.gather` over a single event loop — which serialises ASGI requests, so there was no
+  `asyncio.gather` over a single event loop - which serialises ASGI requests, so there was no
   race to catch — and the gate correctly rejected it as non-discriminating. The gate accepts
   good tests and rejects toothless ones.
 - **The generated tests have real discriminatory power** where they exist: 25 of 28 scored
@@ -108,7 +108,7 @@ differently.
 ## Reproduction
 
 Tested on Python 3.13.14, Docker 29.7.2, Linux. Model ids are pinned exactly, never by a
-`-latest` alias — a floating alias means a sweep cannot be reproduced.
+`-latest` alias - a floating alias means a sweep cannot be reproduced.
 
 ```bash
 python -m venv .venv
@@ -121,7 +121,7 @@ docker compose build sandbox
 
 `.env` needs `SPLITSPEC_<ROLE>_BASE_URL`, `_MODEL` and `_API_KEYS` for `CONTRACT`, `FIXER` and
 `VERIFIER`. Any OpenAI-compatible endpoint works. A run refuses to start if a pinned model id
-is not one the provider actually serves — some providers answer a retired id with HTTP 200 and
+is not one the provider actually serves - some providers answer a retired id with HTTP 200 and
 a *substitute* model rather than a 404, which would silently mislabel every result.
 
 **One case, both modes** (~3–9 min each):
@@ -138,7 +138,7 @@ a *substitute* model rather than a 404, which would silently mislabel every resu
 ```
 
 The sweep is **resumable**: completed pairs are skipped, failed pairs are retried. Free-tier
-quotas and provider timeouts make this essential — re-run the identical command to continue.
+quotas and provider timeouts make this essential - re-run the identical command to continue.
 
 **Expected output.** Each pair writes `artifacts/<case>-<mode>/` containing the issue contract,
 the fixer's patch, the frozen verifier test and its hash, per-suite results, mutation results,
@@ -174,6 +174,6 @@ guarantees correctness, or is equivalent to professional QA.
 
 Synthetic fixture repository and synthetic data only. Every piece of agent-written code runs in
 Docker with networking disabled, a memory and PID cap, and no credentials. Gold tests are never
-readable from an agent workspace. The dashboard is local-only and unauthenticated — do not
+readable from an agent workspace. The dashboard is local-only and unauthenticated - do not
 expose it. Nothing is merged or deployed: every decision string is advisory and a human
 decides.
