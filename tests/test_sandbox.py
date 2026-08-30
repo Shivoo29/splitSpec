@@ -255,3 +255,40 @@ def test_timeout_returns_a_result_rather_than_raising(tmp_path):
         assert res.duration_sec < 15
     finally:
         ws.destroy()
+
+
+def test_patch_round_trip_keeps_a_last_line_with_no_trailing_newline(tmp_path):
+    """A file whose last line lacks a newline must survive diff -> apply intact.
+
+    difflib does not emit the "\\ No newline at end of file" marker, so with
+    keepends=True the `-` and `+` lines for the final line run together on one
+    physical line, _parse_diff matches neither, and the line is silently deleted.
+
+    This corrupted a CORRECT patch on issue-10: `return str(amount)` vanished from
+    money.py, render() returned None, the events endpoint failed response
+    validation, and the gold suite recorded a failure the model never caused. A
+    harness that mangles a good patch manufactures shallow fixes that did not
+    happen, which is the one thing this project must never do.
+    """
+    case = load_case("issue-10")
+    before = sandbox.materialize(case, "before", tmp_path)
+    target = before.path / "app" / "money.py"
+    original = target.read_text(encoding="utf-8")
+    assert not original.endswith("\n"), "fixture no longer reproduces the no-EOF-newline case"
+
+    # The real trigger: the fixer rewrites the whole file with write_file, which
+    # appends the trailing newline the original never had. difflib then emits the
+    # final line as a `-`/`+` pair whose `-` half carries no newline.
+    target.write_text(
+        original.replace("ROUND_HALF_EVEN", "ROUND_HALF_UP") + "\n", encoding="utf-8"
+    )
+    diff = before.snapshot_diff()
+
+    after = sandbox.materialize(case, "after", tmp_path)
+    after.apply_patch(diff)
+    patched = (after.path / "app" / "money.py").read_text(encoding="utf-8")
+
+    assert "return str(amount)" in patched, "the file's last line was dropped by apply_patch"
+    assert "ROUND_HALF_UP" in patched, "the intended change did not survive"
+    before.destroy()
+    after.destroy()

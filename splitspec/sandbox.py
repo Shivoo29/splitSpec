@@ -59,8 +59,32 @@ def _walk_state(root: Path) -> dict[str, bytes]:
 
 
 def _unified(rel: str, old: bytes | None, new: bytes | None) -> str:
+    """A unified diff of one file, with every line newline-terminated.
+
+    `keepends=True` would preserve a missing trailing newline, and difflib does NOT
+    emit the "backslash-No-newline-at-end-of-file" marker that real diff tools use to
+    describe it. The `-` and `+` lines for the final line then run together on one
+    physical line, `_parse_diff` cannot match either of them, and applying the patch
+    SILENTLY DELETES the file's last line.
+
+    That is not hypothetical: on issue-10 the fixer's patch was correct, but
+    applying it dropped `return str(amount)` from money.py, so render() returned
+    None, the events endpoint failed response validation, and the gold suite
+    recorded a failure the model had not caused. A harness that corrupts a correct
+    patch invents shallow fixes that never happened.
+
+    Normalising every line to end with "\n" keeps the diff well-formed. A file with
+    no trailing newline gains one when the patch is applied, which is what a text
+    file should have had anyway.
+    """
+
     def _lines(data: bytes | None) -> list[str]:
-        return [] if data is None else data.decode("utf-8", errors="replace").splitlines(keepends=True)
+        if data is None:
+            return []
+        return [
+            line + "\n"
+            for line in data.decode("utf-8", errors="replace").splitlines()
+        ]
 
     diff = difflib.unified_diff(
         _lines(old),
