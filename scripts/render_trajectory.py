@@ -142,11 +142,16 @@ def render(run_dir: Path) -> str:
     if gate:
         verdict = "VALID" if gate["passed"] else "INVALID"
         out.append("## Validity gate\n")
-        out.append(
-            f"**{verdict}** — compiles={gate['compiles']}, runs={gate['runs']}, "
-            f"fails_on_original_bug={gate['fails_on_original_bug']}\n"
-        )
-        out.append(f"> {gate['reason']}\n")
+        if gate.get("skipped"):
+            # Case 11 has no seeded bug, so there is nothing for a test to catch and
+            # the three booleans are absent rather than false: missing, not negative.
+            out.append(f"**{verdict}** - not assessed ({gate['skipped']})\n")
+        else:
+            out.append(
+                f"**{verdict}** - compiles={gate.get('compiles')}, runs={gate.get('runs')}, "
+                f"fails_on_original_bug={gate.get('fails_on_original_bug')}\n"
+            )
+        out.append(f"> {gate.get('reason', 'no reason recorded')}\n")
 
     suites = [e for e in events if e["kind"] == "suite"]
     if suites:
