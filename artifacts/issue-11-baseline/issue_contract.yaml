@@ -1,0 +1,16 @@
+case_id: issue-11
+summary: Registrations have been reported to disappear intermittently, but the report
+  lacks reproducible steps, identifiers, or timestamps.
+invariants: []
+inputs: []
+expected_outputs: []
+out_of_scope: []
+ambiguities:
+- No deterministic steps to reproduce the disappearance are provided.
+- Missing specific account identifier(s) or registration ID(s).
+- No timestamp or time window indicating when the issue occurred.
+- Unclear which API endpoint or UI action is involved (e.g., mobile app, email confirmation,
+  web UI).
+- Uncertain whether the disappearance is permanent or temporary, and what the expected
+  persistence behavior is.
+confidence: low

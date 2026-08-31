@@ -1,0 +1,12 @@
+{
+  "case_id": "issue-07",
+  "filename": "test_issue_07.py",
+  "run_command": "pytest test_issue_07.py",
+  "invariant": "For any given user ID and event ID, the system must contain at most one registration record whose status is 'confirmed'.",
+  "assumptions": [
+    "The system uses a database or locking mechanism that should prevent concurrent writes to the same user/event pair.",
+    "The test environment allows for concurrent requests to be triggered against the FastAPI application."
+  ],
+  "confidence": "high",
+  "frozen_sha256": "685e8e4a17884064a618a1dbfc5e12661b92262c3a03e7b0e8a3eb162c2f0656"
+}

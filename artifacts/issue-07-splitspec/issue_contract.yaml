@@ -1,0 +1,33 @@
+case_id: issue-07
+summary: Concurrent registration attempts for the same user and event must not result
+  in multiple confirmed registrations.
+invariants:
+- For any given user ID and event ID, the system must contain at most one registration
+  record whose status is 'confirmed'.
+inputs:
+- Two or more registration requests sent concurrently (or within a very short time
+  window) that specify the same user identifier and the same event identifier.
+expected_outputs:
+- After processing the concurrent requests, there is at most one 'confirmed' registration
+  record for that user/event pair.
+- Any additional request that would create a duplicate confirmed registration must
+  be rejected or return a response indicating that a confirmed registration already
+  exists, without inserting a new record.
+out_of_scope:
+- "Handling of registrations in non\u2011confirmed states (e.g., pending, cancelled)."
+- "Payment processing, ticket inventory adjustments, or other side\u2011effects unrelated\
+  \ to the uniqueness of confirmed registrations."
+- Performance characteristics of the system under load beyond the uniqueness guarantee.
+- "Logging, monitoring, or audit\u2011trail details."
+ambiguities:
+- Exact API endpoint and request payload format used to create a registration.
+- Name of the field that denotes a registration's status and the exact value representing
+  'confirmed'.
+- What response (error code, message) the system should return when a duplicate registration
+  is attempted.
+- Database technology and schema details (e.g., whether a unique index exists on (user_id,
+  event_id, status)).
+- Transaction isolation level and locking strategy employed during registration creation.
+- Whether the invariant applies only to confirmed registrations or to all registration
+  records.
+confidence: medium

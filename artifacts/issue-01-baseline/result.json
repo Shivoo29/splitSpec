@@ -1,6 +1,104 @@
 {
   "case_id": "issue-01",
   "mode": "baseline",
-  "ok": false,
-  "error": "The read operation timed out"
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-01",
+    "summary": "The public API currently accepts event creation requests with invalid data such as an empty title or a negative ticket price, which should be rejected.",
+    "invariants": [
+      "Creating an event with an empty title must be rejected by the API and must not result in a persisted event.",
+      "Creating an event with a negative ticket price must be rejected by the API and must not result in a persisted event."
+    ],
+    "inputs": [
+      "POST /events with JSON payload containing a non‑null but empty string for the \"title\" field and otherwise valid data.",
+      "POST /events with JSON payload containing a numeric \"ticket_price\" field set to a negative value and otherwise valid data."
+    ],
+    "expected_outputs": [
+      "The API responds with an HTTP 4xx client‑error status code indicating validation failure.",
+      "The response body contains an error indication that the specific field(s) failed validation (e.g., a message or error code referencing \"title\" or \"ticket_price\").",
+      "A subsequent GET /events request does not list the event that was attempted to be created with invalid data."
+    ],
+    "out_of_scope": [
+      "Validation of other fields not mentioned in the report (e.g., description, date, location).",
+      "Authentication/authorization behavior for the endpoint.",
+      "Behaviour of the API for completely missing fields versus empty strings.",
+      "Database schema constraints unrelated to the described validation."
+    ],
+    "ambiguities": [
+      "Exact HTTP status code to be used for validation failures (e.g., 400 vs 422).",
+      "Exact structure and content of the error response payload (JSON schema, error codes, messages).",
+      "Whether a missing title field should be treated the same as an empty string.",
+      "Whether zero ticket price is considered valid or should also be rejected."
+    ],
+    "confidence": "medium"
+  },
+  "patch": {
+    "case_id": "issue-01",
+    "diff": "--- a/app/routes/events.py\n+++ b/app/routes/events.py\n@@ -25,6 +25,20 @@\n     capacity: int = 100\n     price: Decimal\n     currency: str = \"USD\"\n+\n+    @field_validator(\"title\")\n+    @classmethod\n+    def _check_title_not_empty(cls, value: str) -> str:\n+        if not value.strip():\n+            raise ValueError(\"title cannot be empty\")\n+        return value\n+\n+    @field_validator(\"price\")\n+    @classmethod\n+    def _check_price_non_negative(cls, value: Decimal) -> Decimal:\n+        if value < 0:\n+            raise ValueError(\"price cannot be negative\")\n+        return value\n \n     @field_validator(\"currency\")\n     @classmethod\n--- a/final_validation_test.py\n+++ b/final_validation_test.py\n@@ -0,0 +1,63 @@\n+\"\"\"Final comprehensive validation test.\"\"\"\n+import pytest\n+from httpx import AsyncClient\n+\n+\n+async def test_comprehensive_validation(client, auth_headers, tokens):\n+    \"\"\"Comprehensive test of all validation scenarios.\"\"\"\n+    \n+    # Test 1: Empty title should be rejected\n+    payload = {\n+        \"title\": \"\",\n+        \"starts_at\": \"2026-06-01T09:00:00Z\",\n+        \"capacity\": 10,\n+        \"price\": \"25.00\",\n+        \"currency\": \"USD\",\n+    }\n+    r = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=payload)\n+    assert r.status_code == 422, \"Empty title should be rejected with 422\"\n+    assert \"detail\" in r.json(), \"Error response should contain detail\"\n+    \n+    # Test 2: Negative price should be rejected\n+    payload = {\n+        \"title\": \"Test Event\",\n+        \"starts_at\": \"2026-06-01T09:00:00Z\",\n+        \"capacity\": 10,\n+        \"price\": \"-25.00\",\n+        \"currency\": \"USD\",\n+    }\n+    r = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=payload)\n+    assert r.status_code == 422, \"Negative price should be rejected with 422\"\n+    assert \"detail\" in r.json(), \"Error response should contain detail\"\n+    \n+    # Test 3: Valid event should be created\n+    payload = {\n+        \"title\": \"Valid Event\",\n+        \"starts_at\": \"2026-06-01T09:00:00Z\",\n+        \"capacity\": 10,\n+        \"price\": \"25.00\",\n+        \"currency\": \"USD\",\n+    }\n+    r = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=payload)\n+    assert r.status_code == 201, \"Valid event should be created with 201\"\n+    assert r.json()[\"title\"] == \"Valid Event\", \"Response should contain correct title\"\n+    \n+    # Test 4: Zero price should be accepted\n+    payload = {\n+        \"title\": \"Free Event\",\n+        \"starts_at\": \"2026-06-01T09:00:00Z\",\n+        \"capacity\": 10,\n+        \"price\": \"0.00\",\n+        \"currency\": \"USD\",\n+    }\n+    r = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=payload)\n+    assert r.status_code == 201, \"Zero price should be accepted with 201\"\n+    assert r.json()[\"price\"] == \"0.00\", \"Response should contain zero price\"\n+    \n+    # Test 5: Verify invalid events were not created\n+    listing = (await client.get(\"/events\")).json()\n+    titles = [e[\"title\"] for e in listing[\"items\"]]\n+    assert \"\" not in titles, \"Empty title event should not be in listing\"\n+    assert \"Test Event\" not in titles, \"Negative price event should not be in listing\"\n+    assert \"Valid Event\" in titles, \"Valid event should be in listing\"\n+    assert \"Free Event\" in titles, \"Zero price event should be in listing\"\n--- a/test_edge_cases.py\n+++ b/test_edge_cases.py\n@@ -0,0 +1,50 @@\n+\"\"\"Test edge cases for validation.\"\"\"\n+import pytest\n+from httpx import AsyncClient\n+\n+\n+async def test_whitespace_only_title_is_rejected(client, auth_headers, tokens):\n+    \"\"\"Test that creating an event with whitespace-only title is rejected.\"\"\"\n+    payload = {\n+        \"title\": \"   \",\n+        \"starts_at\": \"2026-06-01T09:00:00Z\",\n+        \"capacity\": 10,\n+        \"price\": \"25.00\",\n+        \"currency\": \"USD\",\n+    }\n+    r = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=payload)\n+    assert r.status_code == 422  # Unprocessable Entity\n+    body = r.json()\n+    assert \"detail\" in body\n+\n+\n+async def test_zero_price_is_accepted(client, auth_headers, tokens):\n+    \"\"\"Test that creating an event with zero price is accepted.\"\"\"\n+    payload = {\n+        \"title\": \"Free Event\",\n+        \"starts_at\": \"2026-06-01T09:00:00Z\",\n+        \"capacity\": 10,\n+        \"price\": \"0.00\",\n+        \"currency\": \"USD\",\n+    }\n+    r = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=payload)\n+    assert r.status_code == 201  # Created\n+    body = r.json()\n+    assert body[\"title\"] == \"Free Event\"\n+    assert body[\"price\"] == \"0.00\"\n+\n+\n+async def test_positive_price_is_accepted(client, auth_headers, tokens):\n+    \"\"\"Test that creating an event with positive price is accepted.\"\"\"\n+    payload = {\n+        \"title\": \"Paid Event\",\n+        \"starts_at\": \"2026-06-01T09:00:00Z\",\n+        \"capacity\": 10,\n+        \"price\": \"99.99\",\n+        \"currency\": \"USD\",\n+    }\n+    r = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=payload)\n+    assert r.status_code == 201  # Created\n+    body = r.json()\n+    assert body[\"title\"] == \"Paid Event\"\n+    assert body[\"price\"] == \"99.99\"\n--- a/test_validation.py\n+++ b/test_validation.py\n@@ -0,0 +1,41 @@\n+\"\"\"Test validation of empty title and negative price.\"\"\"\n+import pytest\n+from httpx import AsyncClient\n+\n+\n+async def test_empty_title_is_rejected(client, auth_headers, tokens):\n+    \"\"\"Test that creating an event with empty title is rejected.\"\"\"\n+    payload = {\n+        \"title\": \"\",\n+        \"starts_at\": \"2026-06-01T09:00:00Z\",\n+        \"capacity\": 10,\n+        \"price\": \"25.00\",\n+        \"currency\": \"USD\",\n+    }\n+    r = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=payload)\n+    assert r.status_code == 422  # Unprocessable Entity\n+    body = r.json()\n+    assert \"detail\" in body\n+    # Check that the event was not created\n+    listing = (await client.get(\"/events\")).json()\n+    titles = [e[\"title\"] for e in listing[\"items\"]]\n+    assert \"\" not in titles\n+\n+\n+async def test_negative_price_is_rejected(client, auth_headers, tokens):\n+    \"\"\"Test that creating an event with negative price is rejected.\"\"\"\n+    payload = {\n+        \"title\": \"Test Event\",\n+        \"starts_at\": \"2026-06-01T09:00:00Z\",\n+        \"capacity\": 10,\n+        \"price\": \"-25.00\",\n+        \"currency\": \"USD\",\n+    }\n+    r = await client.post(\"/events\", headers=auth_headers(tokens[\"alice\"]), json=payload)\n+    assert r.status_code == 422  # Unprocessable Entity\n+    body = r.json()\n+    assert \"detail\" in body\n+    # Check that the event was not created\n+    listing = (await client.get(\"/events\")).json()\n+    titles = [e[\"title\"] for e in listing[\"items\"]]\n+    assert \"Test Event\" not in titles\n",
+    "files_changed": [
+      "app/routes/events.py",
+      "final_validation_test.py",
+      "test_edge_cases.py",
+      "test_validation.py"
+    ],
+    "lines_added": 168,
+    "lines_removed": 0,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; ## Summary I successfully resolved the validation issue in the EventPulse API by adding input validation to the `EventCreate` Pydantic model in `app/routes/events.py`. ### Changes Made **File: `app/routes/events.py`** - Added a field validator `_check_title_not_empty` that rejects empty or whitespace-only titles - Added a field validator `_check_price_non_negative` that rejects negative prices - Both validators raise `ValueError` with descriptive error messages when validation fails ### Validation Behavior 1. **Empty Title Validation**: The API now rejects event creation requests with empty or... [truncated, 1532 chars; full reply in trajectory.jsonl]"
+  },
+  "verifier_test": null,
+  "validity": null,
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_events.py",
+    "passed": true,
+    "total": 4,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.107,
+    "stdout_tail": "....                                                                     [100%]\n4 passed in 0.07s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-01-unh43oob/issue-01-judge/.junit/visible.xml"
+  },
+  "verifier": null,
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": false,
+    "total": 3,
+    "failures": 2,
+    "errors": 0,
+    "duration_sec": 1.108,
+    "stdout_tail": "FF.                                                                      [100%]\n=================================== FAILURES ===================================\n________________________ test_invalid_payloads_are_422 _________________________\n\nclient = <httpx.AsyncClient object at 0x7fc6f4786c30>\nauth_headers = <function auth_headers.<locals>._headers at 0x7fc6f4638400>\ntokens = {'alice': 'alice-token-0001', 'bob': 'bob-token-0002', 'carol': 'carol-token-0003', 'dana': 'dana-token-0004'}\n\n    async def test_invalid_payloads_are_422(client, auth_headers, tokens):\n        headers = auth_headers(tokens[\"alice\"])\n        for broken in INVALID:\n            payload = {**BASE, **broken}\n            r = await client.post(\"/events\", headers=headers, json=payload)\n>           assert r.status_code == 422, payload\nE           AssertionError: {'title': 'Gold Event', 'starts_at': '2026-08-01T09:00:00Z', 'capacity': 0, 'price': '10.00', ...}\nE           assert 201 == 422\nE            +  where 201 = <Response [201 Created]>.status_code\n\ngold/test_validation.py:26: AssertionError\n______________________ test_rejected_events_leave_no_rows ______________________\n\nclient = <httpx.AsyncClient object at 0x7fc6f47913a0>\nauth_headers = <function auth_headers.<locals>._headers at 0x7fc6f4666020>\ntokens = {'alice': 'alice-token-0001', 'bob': 'bob-token-0002', 'carol': 'carol-token-0003', 'dana': 'dana-token-0004'}\n\n    async def test_rejected_events_leave_no_rows(client, auth_headers, tokens):\n        headers = auth_headers(tokens[\"alice\"])\n        for broken in INVALID:\n            await client.post(\"/events\", headers=headers, json={**BASE, **broken})\n        listing = (await client.get(\"/events\")).json()\n>       assert listing[\"total\"] == 3\nE       assert 5 == 3\n\ngold/test_validation.py:34: AssertionError\n=========================== short test summary info ============================\nFAILED gold/test_validation.py::test_invalid_payloads_are_422 - AssertionErro...\nFAILED gold/test_validation.py::test_rejected_events_leave_no_rows - assert 5...\n2 failed, 1 passed in 0.09s\n",
+    "junit_xml_path": "/tmp/splitspec-ws-issue-01-unh43oob/issue-01-judge/.junit/gold.xml"
+  },
+  "mutation": [],
+  "decision": "REVIEW REQUIRED",
+  "runtime_sec": 200.227,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-01-baseline"
 }

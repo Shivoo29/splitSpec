@@ -1,0 +1,33 @@
+case_id: issue-01
+summary: The public API currently accepts event creation requests with invalid data
+  such as an empty title or a negative ticket price, which should be rejected.
+invariants:
+- Creating an event with an empty title must be rejected by the API and must not result
+  in a persisted event.
+- Creating an event with a negative ticket price must be rejected by the API and must
+  not result in a persisted event.
+inputs:
+- "POST /events with JSON payload containing a non\u2011null but empty string for\
+  \ the \"title\" field and otherwise valid data."
+- POST /events with JSON payload containing a numeric "ticket_price" field set to
+  a negative value and otherwise valid data.
+expected_outputs:
+- "The API responds with an HTTP 4xx client\u2011error status code indicating validation\
+  \ failure."
+- The response body contains an error indication that the specific field(s) failed
+  validation (e.g., a message or error code referencing "title" or "ticket_price").
+- A subsequent GET /events request does not list the event that was attempted to be
+  created with invalid data.
+out_of_scope:
+- Validation of other fields not mentioned in the report (e.g., description, date,
+  location).
+- Authentication/authorization behavior for the endpoint.
+- Behaviour of the API for completely missing fields versus empty strings.
+- Database schema constraints unrelated to the described validation.
+ambiguities:
+- Exact HTTP status code to be used for validation failures (e.g., 400 vs 422).
+- Exact structure and content of the error response payload (JSON schema, error codes,
+  messages).
+- Whether a missing title field should be treated the same as an empty string.
+- Whether zero ticket price is considered valid or should also be rejected.
+confidence: medium

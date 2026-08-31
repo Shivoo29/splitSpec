@@ -28,3 +28,29 @@
 {"ts": 1788112108.3053184, "actor": "verifier", "kind": "tool_call", "tool": "finish", "chars": 1599}
 {"ts": 1788112108.305343, "actor": "verifier", "kind": "agent_end", "stop_reason": "finished", "final_message_len": 1599, "calls": 6, "tokens_generated": 941, "billed_tokens": 17432}
 {"ts": 1788112108.305399, "actor": "verifier", "kind": "test", "case_id": "issue-01", "stop_reason": "finished", "filename": "test_issue_01.py", "invariant": "A request to create an event with an empty title or a negative ticket price must be rejected by the API (return a 4xx error code).", "confidence": "high", "n_assumptions": 3, "contents_len": 962}
+{"ts": 1788159898.6846654, "actor": "contract", "kind": "call", "case_id": "issue-01", "model": "openai/gpt-oss-120b"}
+{"ts": 1788159898.6875126, "actor": "contract", "kind": "tokens", "input_tokens": 938, "output_tokens": 976, "model": "openai/gpt-oss-120b"}
+{"ts": 1788159898.6876128, "actor": "contract", "kind": "parsed", "case_id": "issue-01", "confidence": "high", "n_invariants": 2, "n_ambiguities": 4}
+{"ts": 1788159900.0394068, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 945, "output_tokens": 35, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788159900.0405233, "actor": "fixer", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788159901.0065057, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 1076, "output_tokens": 16, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788159901.0072775, "actor": "verifier", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788159901.3709588, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1319, "output_tokens": 39, "finish_reason": "tool_calls", "tool_calls": 2}
+{"ts": 1788159901.3711402, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/routes/events.py", "chars": 3885, "truncated": false}
+{"ts": 1788159901.3712363, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/models.py", "chars": 5001, "truncated": false}
+{"ts": 1788159903.0091803, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 3600, "output_tokens": 33, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788159903.0093758, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "visible_tests/issue-01/test_events.py", "chars": 1497, "truncated": false}
+{"ts": 1788159904.497019, "actor": "verifier", "kind": "model_call", "model": "gemini-3.1-flash-lite", "input_tokens": 1494, "output_tokens": 22, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788159904.497245, "actor": "verifier", "kind": "tool_call", "tool": "read_file", "path": "app/routes/events.py", "chars": 3885, "truncated": false}
+{"ts": 1788159904.6664643, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4045, "output_tokens": 38, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788159904.6667995, "actor": "fixer", "kind": "tool_call", "tool": "search", "pattern": "empty.*title|negative.*price", "matches": 0}
+{"ts": 1788159906.368703, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4088, "output_tokens": 28, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788159906.368999, "actor": "fixer", "kind": "tool_call", "tool": "list_files", "path": "visible_tests", "entries": 2}
+{"ts": 1788159908.0145729, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4136, "output_tokens": 39, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788159909.1461055, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-01/test_events.py", "-v"], "exit_code": 0, "duration_sec": 1.131}
+{"ts": 1788159935.8788915, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4435, "output_tokens": 656, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788159935.8791504, "actor": "fixer", "kind": "tool_call", "tool": "write_file", "path": "visible_tests/issue-01/test_validation.py", "chars": 1417}
+{"ts": 1788159937.0987678, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 5112, "output_tokens": 27, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788159938.203659, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-01/test_validation.py", "-v"], "exit_code": 1, "duration_sec": 1.105}
+{"ts": 1788159943.3272097, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 5763, "output_tokens": 71, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788159943.327433, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/routes/events.py", "chars": 3885, "truncated": false}

@@ -1,93 +1,117 @@
 @import "tailwindcss";
 
-/* Type: the system UI stack, which resolves to SF Pro on Apple platforms and to
-   the platform's own humanist sans elsewhere. Nothing is downloaded, so the page
-   is correct with no network and there is no font-swap reflow. A monospace face
-   is reserved for anything the harness emitted verbatim - ids, diffs, counts,
-   pytest output - so machine text is always distinguishable from prose. */
+/* ── Palette ───────────────────────────────────────────────────────────────
+   Indigo carries the product, cyan marks the independent verifier (the thing
+   that is structurally *separate*), and amber marks anything needing human
+   judgement. Green and red are reserved exclusively for test outcomes, because
+   the green-visible-beside-red-gold comparison is the whole finding and nothing
+   else on the page is allowed to compete with it.
+
+   Every token is defined here in light, redefined under dark, and nowhere else -
+   a colour can never exist in only one theme.
+   ──────────────────────────────────────────────────────────────────────────── */
 
 :root {
   color-scheme: light;
 
-  /* Surfaces. The page is off-white and cards are pure white, so a card reads as
-     lifted without needing a shadow to say so. */
-  --bg: #fbfbfd;
+  --bg: #fafaff;
+  --bg-elev: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f5f5f7;
-  --border: #e3e3e6;
-  --border-strong: #c7c7cc;
+  --surface-2: #f4f4fb;
+  --surface-3: #ebebf6;
+  --border: #e2e2f0;
+  --border-strong: #c3c3dc;
 
-  /* Text. Three weights of emphasis, all >= 4.5:1 on their surface. */
-  --fg: #1d1d1f;
-  --fg-muted: #52525b;
-  --fg-faint: #86868b;
+  --fg: #16162b;
+  --fg-muted: #4d4d70;
+  --fg-faint: #8484a8;
 
-  --accent: #0066cc;
-  --accent-fg: #ffffff;
+  --brand: #4f46e5;
+  --brand-soft: #eef2ff;
+  --brand-fg: #ffffff;
 
-  /* Status. Deliberately the only saturated colour on the page: the green-visible
-     beside red-gold comparison is the finding, so nothing else competes with it. */
-  --pass: #147a3d;
-  --pass-bg: #e8f6ed;
-  --fail: #c4271b;
-  --fail-bg: #fdecea;
-  --warn: #9a5b00;
-  --warn-bg: #fdf3e3;
-  --none: #86868b;
-  --none-bg: #f0f0f2;
+  --verifier: #0e7490;
+  --verifier-soft: #ecfeff;
 
-  --add: #147a3d;
-  --del: #c4271b;
+  --pass: #15803d;
+  --pass-bg: #eafaef;
+  --fail: #be123c;
+  --fail-bg: #ffeef2;
+  --warn: #a16207;
+  --warn-bg: #fef7e3;
+  --none: #8484a8;
+  --none-bg: #f0f0f7;
 
-  --radius: 12px;
-  --radius-sm: 8px;
-  --rail: 264px;
+  --add: #15803d;
+  --del: #be123c;
+
+  --radius: 14px;
+  --radius-sm: 9px;
+  --shadow-sm: 0 1px 2px rgb(22 22 43 / 0.05);
+  --shadow: 0 4px 16px -4px rgb(22 22 43 / 0.1), 0 1px 2px rgb(22 22 43 / 0.05);
+  --shadow-lg: 0 18px 40px -12px rgb(22 22 43 / 0.18);
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
 
-    --bg: #000000;
-    --surface: #1c1c1e;
-    --surface-2: #2c2c2e;
-    --border: #38383a;
-    --border-strong: #545458;
+    --bg: #0a0a14;
+    --bg-elev: #12121f;
+    --surface: #141422;
+    --surface-2: #1c1c2e;
+    --surface-3: #26263c;
+    --border: #282840;
+    --border-strong: #3f3f60;
 
-    --fg: #f5f5f7;
-    --fg-muted: #aeaeb2;
-    --fg-faint: #8e8e93;
+    --fg: #eeeef8;
+    --fg-muted: #a9a9c8;
+    --fg-faint: #7a7a9c;
 
-    --accent: #2997ff;
-    --accent-fg: #000000;
+    --brand: #818cf8;
+    --brand-soft: #1e1b4b;
+    --brand-fg: #0a0a14;
 
-    /* Tonal variants, not the light values inverted: the light green and red both
-       fail contrast against a near-black surface. */
-    --pass: #30d158;
-    --pass-bg: #10281a;
-    --fail: #ff6961;
-    --fail-bg: #2e1514;
-    --warn: #ffd426;
-    --warn-bg: #2b2205;
-    --none: #8e8e93;
-    --none-bg: #26262a;
+    --verifier: #22d3ee;
+    --verifier-soft: #0b3a45;
 
-    --add: #30d158;
-    --del: #ff6961;
+    /* Desaturated tonal variants - the light greens and reds fail contrast on
+       a near-black surface, so they are not simply inverted. */
+    --pass: #4ade80;
+    --pass-bg: #0e2a1b;
+    --fail: #fb7185;
+    --fail-bg: #33141d;
+    --warn: #fbbf24;
+    --warn-bg: #2e2408;
+    --none: #7a7a9c;
+    --none-bg: #1e1e30;
+
+    --add: #4ade80;
+    --del: #fb7185;
+
+    --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+    --shadow: 0 4px 16px -4px rgb(0 0 0 / 0.5);
+    --shadow-lg: 0 18px 40px -12px rgb(0 0 0 / 0.6);
   }
 }
 
 @theme inline {
   --color-bg: var(--bg);
+  --color-bg-elev: var(--bg-elev);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-fg: var(--fg);
   --color-fg-muted: var(--fg-muted);
   --color-fg-faint: var(--fg-faint);
-  --color-accent: var(--accent);
-  --color-accent-fg: var(--accent-fg);
+  --color-brand: var(--brand);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-fg: var(--brand-fg);
+  --color-verifier: var(--verifier);
+  --color-verifier-soft: var(--verifier-soft);
   --color-pass: var(--pass);
   --color-pass-bg: var(--pass-bg);
   --color-fail: var(--fail);
@@ -110,39 +134,41 @@ body {
   font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.55;
-  /* Counts, durations and ids sit in columns; proportional digits jitter between
-     rows and make a table look misaligned even when it is not. */
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
-  text-rendering: optimizeLegibility;
 }
 
-/* Display type. Apple's headline treatment is size and negative tracking, not
-   weight: a large semibold at -0.02em reads as confident, a large bold reads as
-   loud. Tracking tightens as size grows, which is why it is per-step. */
+/* ── Type scale ─────────────────────────────────────────────────────────── */
+
+.t-hero {
+  font-size: clamp(2.25rem, 1.3rem + 3.4vw, 4rem);
+  line-height: 1.04;
+  letter-spacing: -0.03em;
+  font-weight: 640;
+}
 .t-display {
-  font-size: clamp(1.75rem, 1.2rem + 1.8vw, 2.5rem);
-  line-height: 1.1;
-  letter-spacing: -0.021em;
-  font-weight: 600;
+  font-size: clamp(1.65rem, 1.2rem + 1.7vw, 2.375rem);
+  line-height: 1.12;
+  letter-spacing: -0.022em;
+  font-weight: 620;
 }
 .t-title {
-  font-size: 1.3125rem;
-  line-height: 1.25;
+  font-size: 1.25rem;
+  line-height: 1.3;
   letter-spacing: -0.014em;
   font-weight: 600;
 }
 .t-section {
   font-size: 0.6875rem;
   line-height: 1.3;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  font-weight: 590;
+  font-weight: 600;
   color: var(--fg-faint);
 }
 .t-body {
   font-size: 0.9375rem;
-  line-height: 1.6;
+  line-height: 1.65;
   color: var(--fg-muted);
 }
 .t-caption {
@@ -150,18 +176,87 @@ body {
   line-height: 1.45;
   color: var(--fg-faint);
 }
-/* One numeric style for every headline figure, so a metric is recognisable as a
-   metric wherever it appears. */
 .t-figure {
-  font-size: 2rem;
-  line-height: 1.05;
-  letter-spacing: -0.02em;
-  font-weight: 590;
+  font-size: clamp(1.75rem, 1.3rem + 1.4vw, 2.5rem);
+  line-height: 1;
+  letter-spacing: -0.028em;
+  font-weight: 640;
   font-variant-numeric: tabular-nums;
 }
 
-/* Wide content - diffs, pytest output, tables - scrolls inside its own box. The
-   page body must never scroll sideways. */
+/* ── Motion ─────────────────────────────────────────────────────────────────
+   Entrance only, once, on load. Staggered by 60ms so a grid resolves rather
+   than snapping. Nothing loops, nothing moves on scroll: this is an evidence
+   document and motion that repeats would compete with the data. */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 520ms var(--ease) both;
+}
+.d1 {
+  animation-delay: 60ms;
+}
+.d2 {
+  animation-delay: 120ms;
+}
+.d3 {
+  animation-delay: 180ms;
+}
+.d4 {
+  animation-delay: 240ms;
+}
+.d5 {
+  animation-delay: 300ms;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  transition:
+    transform 240ms var(--ease),
+    box-shadow 240ms var(--ease),
+    border-color 240ms var(--ease);
+}
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+  border-color: var(--border-strong);
+}
+
+/* A single soft brand wash behind the hero. Not a gradient on text, not a
+   decorative blob - it exists to lift the headline off a flat page. */
+.hero-wash {
+  position: absolute;
+  inset: -20% -10% auto -10%;
+  height: 520px;
+  background:
+    radial-gradient(
+      60% 60% at 22% 20%,
+      color-mix(in oklab, var(--brand) 18%, transparent),
+      transparent 70%
+    ),
+    radial-gradient(
+      50% 50% at 78% 10%,
+      color-mix(in oklab, var(--verifier) 14%, transparent),
+      transparent 70%
+    );
+  filter: blur(28px);
+  pointer-events: none;
+  z-index: -1;
+}
+
 .scroll-x {
   overflow-x: auto;
   max-width: 100%;
@@ -174,25 +269,27 @@ a {
 }
 
 :where(a, button, [tabindex]):focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--brand);
   outline-offset: 3px;
-  border-radius: 4px;
+  border-radius: 5px;
 }
 
-/* One motion token. Every transition on the page uses it, so the interface has a
-   single rhythm rather than a different feel per component. */
-:where(a, button, tr, .card) {
-  transition:
-    background-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 180ms cubic-bezier(0.4, 0, 0.2, 1),
-    color 180ms cubic-bezier(0.4, 0, 0.2, 1);
+tbody tr {
+  transition: background-color 160ms var(--ease);
+}
+tbody tr:hover {
+  background: var(--surface-2);
 }
 
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
-    transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+  .card-hover:hover {
+    transform: none;
   }
 }

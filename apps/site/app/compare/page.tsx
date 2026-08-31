@@ -7,8 +7,6 @@ import {
 } from "@/lib/artifacts";
 import { Card, VerdictChip } from "@/components/ui";
 
-export const dynamic = "force-dynamic";
-
 /** A rate is only reportable with its denominator, and only over runs that were
  *  actually measured. Missing data is null with a reason, never 0 — a zero and an
  *  unmeasured value are opposite findings. */
@@ -84,8 +82,8 @@ export default async function ComparePage() {
   });
 
   return (
-    <div className="mx-auto max-w-[1240px] px-8 py-12">
-      <header className="mb-10">
+    <div className="mx-auto max-w-[1120px] px-6 py-12">
+      <header className="rise mb-10">
         <h1 className="t-display">Baseline vs SplitSpec vs gold oracle</h1>
         <p className="t-body mt-2">
           Degraded runs are excluded from every figure. A cell reading{" "}
@@ -159,7 +157,7 @@ export default async function ComparePage() {
                     <tr key={entry.id} className="border-t border-border">
                       <td className="py-2 pr-4">
                         <Link
-                          href={`/run/${entry.id}`}
+                          href={`/runs/${entry.id}`}
                           className="hover:text-accent"
                         >
                           {entry.id}
@@ -177,7 +175,7 @@ export default async function ComparePage() {
                   <tr key={entry.id} className="border-t border-border">
                     <td className="py-2 pr-4">
                       <Link
-                        href={`/run/${entry.id}`}
+                        href={`/runs/${entry.id}`}
                         className="hover:text-accent"
                       >
                         {entry.id}

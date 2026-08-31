@@ -1,0 +1,153 @@
+--- a/app/routes/registrations.py
++++ b/app/routes/registrations.py
+@@ -82,6 +82,10 @@
+ 
+     now = request.app.state.clock.utcnow()
+     if existing is not None:
++        # Double-check the status right before updating to handle race conditions
++        # where another request might have already reactivated this registration
++        if existing.status == "confirmed":
++            raise HTTPException(status_code=409, detail="already registered for this event")
+         reg = existing
+         reg.status = "confirmed"
+         reg.created_at = now
+@@ -146,7 +150,7 @@
+     registration_id: int,
+     request: Request,
+     user: User = Depends(get_current_user),  # noqa: B008
+-    session: Session = Depends(get_session),  # noqa: B008
++    session: Depends(get_session),  # noqa: B008
+ ) -> dict:
+     reg = session.get(Registration, registration_id)
+     if reg is None:
+--- a/test_basic.py
++++ b/test_basic.py
+@@ -0,0 +1,5 @@
++"""Basic test to check if pytest is working."""
++
++def test_basic():
++    """Basic test that should pass."""
++    assert 1 + 1 == 2
+--- a/test_simple.py
++++ b/test_simple.py
+@@ -0,0 +1,18 @@
++"""Simple test to check if the environment is working."""
++from app.main import create_app
++from app.timeutil import FixedClock
++from seed import seed
++
++# Test if we can create the app and seed the database
++app = create_app("sqlite:///./test_simple.db", clock=FixedClock.from_iso("2026-01-01T12:00:00+00:00"))
++with app.state.sessionmaker() as session:
++    seed(session)
++
++print("App created and database seeded successfully!")
++
++# Clean up
++import os
++try:
++    os.remove("./test_simple.db")
++except FileNotFoundError:
++    pass
+--- a/visible_tests/issue-11/test_race_condition.py
++++ b/visible_tests/issue-11/test_race_condition.py
+@@ -0,0 +1,74 @@
++"""Test for race condition in registration reactivation."""
++from __future__ import annotations
++
++import asyncio
++import httpx
++import pytest
++import pytest_asyncio
++
++from app.main import create_app
++from app.timeutil import FixedClock
++from seed import BOB_TOKEN, seed
++
++FIXED_NOW = "2026-01-01T12:00:00+00:00"
++
++
++@pytest_asyncio.fixture
++async def client():
++    # Use a file-based SQLite database instead of in-memory to avoid locking issues
++    application = create_app("sqlite:///./test_race_condition.db", clock=FixedClock.from_iso(FIXED_NOW))
++    with application.state.sessionmaker() as session:
++        seed(session)
++    transport = httpx.ASGITransport(app=application)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as ac:
++        yield ac
++    
++    # Clean up
++    import os
++    try:
++        os.remove("./test_race_condition.db")
++    except FileNotFoundError:
++        pass
++
++
++async def test_race_condition_reactivation(client):
++    """Test that concurrent reactivation of cancelled registration doesn't cause issues."""
++    headers = {"Authorization": f"Bearer {BOB_TOKEN}"}
++    
++    # Bob has a cancelled registration for event 1 (registration_id=2)
++    # Let's try to reactivate it concurrently
++    
++    async def reactivate():
++        try:
++            response = await client.post("/registrations", json={"event_id": 1}, headers=headers)
++            return response.status_code, response.json()
++        except Exception as e:
++            return getattr(e, 'status_code', 500), {"error": str(e)}
++    
++    # Run multiple concurrent reactivation attempts
++    tasks = [reactivate() for _ in range(5)]
++    results = await asyncio.gather(*tasks)
++    
++    print(f"Results: {results}")
++    
++    # Count successful registrations (status 201)
++    successful = sum(1 for status, _ in results if status == 201)
++    conflicts = sum(1 for status, _ in results if status == 409)
++    errors = sum(1 for status, _ in results if status >= 500)
++    
++    print(f"Successful: {successful}, Conflicts: {conflicts}, Errors: {errors}")
++    
++    # Only one should succeed, others should get 409 conflict
++    assert successful == 1, f"Expected 1 successful registration, got {successful}"
++    assert conflicts == 4, f"Expected 4 conflicts, got {conflicts}"
++    assert errors == 0, f"Unexpected errors: {errors}"
++    
++    # Verify the registration is now confirmed
++    list_response = await client.get("/registrations", headers=headers)
++    assert list_response.status_code == 200
++    registrations = list_response.json()
++    
++    # Find the registration for event 1
++    event1_reg = next((r for r in registrations if r["event_id"] == 1), None)
++    assert event1_reg is not None
++    assert event1_reg["status"] == "confirmed"
+--- a/visible_tests/issue-11/test_simple.py
++++ b/visible_tests/issue-11/test_simple.py
+@@ -0,0 +1,22 @@
++"""Simple test to check if the environment is working."""
++import pytest
++import pytest_asyncio
++
++from app.main import create_app
++from app.timeutil import FixedClock
++from seed import seed
++
++FIXED_NOW = "2026-01-01T12:00:00+00:00"
++
++
++@pytest_asyncio.fixture
++async def client():
++    application = create_app("sqlite:///./test_simple.db", clock=FixedClock.from_iso(FIXED_NOW))
++    with application.state.sessionmaker() as session:
++        seed(session)
++    return application
++
++
++def test_simple(client):
++    """Simple test that should pass."""
++    assert True

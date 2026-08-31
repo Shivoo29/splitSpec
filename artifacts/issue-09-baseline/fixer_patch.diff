@@ -1,0 +1,303 @@
+--- a/app/routes/events.py
++++ b/app/routes/events.py
+@@ -87,6 +87,10 @@
+     )
+     session.add(event)
+     session.commit()
++    
++    # Invalidate cache to ensure new event appears in list immediately
++    request.app.state.cache.invalidate()
++    
+     return event_payload(event)
+ 
+ 
+--- a/visible_tests/issue-09/test_cache_invalidation.py
++++ b/visible_tests/issue-09/test_cache_invalidation.py
+@@ -0,0 +1,99 @@
++"""Test cache invalidation behavior."""
++from __future__ import annotations
++
++
++async def test_cache_invalidation_after_event_creation(client, auth_headers, tokens):
++    """Test that cache is properly invalidated after creating an event."""
++    
++    # Create first event
++    event1 = {
++        "title": "First Event",
++        "starts_at": "2026-09-01T18:00:00+00:00",
++        "capacity": 50,
++        "price": "30.00",
++        "currency": "USD",
++    }
++    
++    create_response1 = await client.post("/events", headers=auth_headers(tokens["alice"]), json=event1)
++    assert create_response1.status_code == 201
++    event1_id = create_response1.json()["id"]
++    
++    # Get event list (will be cached)
++    list_response1 = await client.get("/events")
++    assert list_response1.status_code == 200
++    event_list1 = list_response1.json()
++    assert event1_id in [event["id"] for event in event_list1["items"]]
++    initial_total = event_list1["total"]
++    
++    # Create second event
++    event2 = {
++        "title": "Second Event",
++        "starts_at": "2026-09-02T18:00:00+00:00",
++        "capacity": 60,
++        "price": "35.00",
++        "currency": "USD",
++    }
++    
++    create_response2 = await client.post("/events", headers=auth_headers(tokens["alice"]), json=event2)
++    assert create_response2.status_code == 201
++    event2_id = create_response2.json()["id"]
++    
++    # Get event list again - should NOT use stale cache
++    list_response2 = await client.get("/events")
++    assert list_response2.status_code == 200
++    event_list2 = list_response2.json()
++    
++    # Both events should be in the list
++    event_ids_in_list = [event["id"] for event in event_list2["items"]]
++    assert event1_id in event_ids_in_list, f"Event1 {event1_id} not found in list"
++    assert event2_id in event_ids_in_list, f"Event2 {event2_id} not found in list"
++    
++    # Total should have increased
++    assert event_list2["total"] == initial_total + 1, f"Expected total {initial_total + 1}, got {event_list2['total']}"
++
++
++async def test_cache_invalidation_with_different_pagination(client, auth_headers, tokens):
++    """Test that cache is invalidated for all pagination parameters."""
++    
++    # Get first page (limit=5, offset=0)
++    list_response1 = await client.get("/events?limit=5&offset=0")
++    assert list_response1.status_code == 200
++    initial_count_page1 = len(list_response1.json()["items"])
++    
++    # Get second page (limit=5, offset=5)
++    list_response2 = await client.get("/events?limit=5&offset=5")
++    assert list_response2.status_code == 200
++    initial_count_page2 = len(list_response2.json()["items"])
++    
++    # Create a new event
++    new_event = {
++        "title": "Pagination Test Event",
++        "starts_at": "2026-09-01T18:00:00+00:00",
++        "capacity": 50,
++        "price": "30.00",
++        "currency": "USD",
++    }
++    
++    create_response = await client.post("/events", headers=auth_headers(tokens["alice"]), json=new_event)
++    assert create_response.status_code == 201
++    new_event_id = create_response.json()["id"]
++    
++    # Get first page again - should include new event (cache invalidated)
++    list_response3 = await client.get("/events?limit=5&offset=0")
++    assert list_response3.status_code == 200
++    new_count_page1 = len(list_response3.json()["items"])
++    event_ids_page1 = [event["id"] for event in list_response3.json()["items"]]
++    
++    # Get second page again - should not use stale cache
++    list_response4 = await client.get("/events?limit=5&offset=5")
++    assert list_response4.status_code == 200
++    new_count_page2 = len(list_response4.json()["items"])
++    event_ids_page2 = [event["id"] for event in list_response4.json()["items"]]
++    
++    # The new event should be in one of the pages (depending on sorting)
++    assert new_event_id in event_ids_page1 or new_event_id in event_ids_page2, \
++        f"New event {new_event_id} not found in any page"
++    
++    # At least one page should have changed
++    assert new_count_page1 != initial_count_page1 or new_count_page2 != initial_count_page2, \
++        "Cache was not properly invalidated for pagination"
+--- a/visible_tests/issue-09/test_comprehensive_cache.py
++++ b/visible_tests/issue-09/test_comprehensive_cache.py
+@@ -0,0 +1,109 @@
++"""Comprehensive cache behavior tests."""
++from __future__ import annotations
++
++
++async def test_multiple_events_creation_and_listing(client, auth_headers, tokens):
++    """Test creating multiple events and verifying they all appear in the list."""
++    
++    # Get initial event count
++    initial_response = await client.get("/events")
++    initial_count = initial_response.json()["total"]
++    
++    # Create multiple events
++    events_to_create = [
++        {
++            "title": f"Event {i}",
++            "starts_at": f"2026-09-{i:02d}T18:00:00+00:00",
++            "capacity": 50 + i,
++            "price": f"{30.00 + i:.2f}",
++            "currency": "USD",
++        }
++        for i in range(1, 6)
++    ]
++    
++    created_event_ids = []
++    
++    for event_data in events_to_create:
++        create_response = await client.post("/events", headers=auth_headers(tokens["alice"]), json=event_data)
++        assert create_response.status_code == 201
++        created_event_ids.append(create_response.json()["id"])
++    
++    # Get the event list - should include all newly created events
++    final_response = await client.get("/events")
++    assert final_response.status_code == 200
++    final_list = final_response.json()
++    
++    # Verify all created events are in the list
++    event_ids_in_list = [event["id"] for event in final_list["items"]]
++    for event_id in created_event_ids:
++        assert event_id in event_ids_in_list, f"Event {event_id} not found in final list"
++    
++    # Verify the total count increased correctly
++    assert final_list["total"] == initial_count + len(events_to_create)
++
++
++async def test_cache_consistency_across_requests(client, auth_headers, tokens):
++    """Test that cache remains consistent across multiple requests."""
++    
++    # Create an event
++    new_event = {
++        "title": "Consistency Test Event",
++        "starts_at": "2026-09-01T18:00:00+00:00",
++        "capacity": 50,
++        "price": "30.00",
++        "currency": "USD",
++    }
++    
++    create_response = await client.post("/events", headers=auth_headers(tokens["alice"]), json=new_event)
++    assert create_response.status_code == 201
++    event_id = create_response.json()["id"]
++    
++    # Make multiple requests to the event list
++    for _ in range(5):
++        list_response = await client.get("/events")
++        assert list_response.status_code == 200
++        event_list = list_response.json()
++        
++        # Verify the new event is always present
++        event_ids_in_list = [event["id"] for event in event_list["items"]]
++        assert event_id in event_ids_in_list, f"Event {event_id} not found in list"
++
++
++async def test_event_list_with_pagination_after_creation(client, auth_headers, tokens):
++    """Test that pagination works correctly after event creation."""
++    
++    # Create an event
++    new_event = {
++        "title": "Pagination Consistency Event",
++        "starts_at": "2026-09-01T18:00:00+00:00",
++        "capacity": 50,
++        "price": "30.00",
++        "currency": "USD",
++    }
++    
++    create_response = await client.post("/events", headers=auth_headers(tokens["alice"]), json=new_event)
++    assert create_response.status_code == 201
++    event_id = create_response.json()["id"]
++    
++    # Test different pagination parameters
++    pagination_params = [
++        {"limit": 5, "offset": 0},
++        {"limit": 10, "offset": 0},
++        {"limit": 5, "offset": 5},
++        {"limit": 100, "offset": 0},
++    ]
++    
++    found_in_any_page = False
++    
++    for params in pagination_params:
++        query_string = f"?limit={params['limit']}&offset={params['offset']}"
++        list_response = await client.get(f"/events{query_string}")
++        assert list_response.status_code == 200
++        event_list = list_response.json()
++        
++        event_ids_in_list = [event["id"] for event in event_list["items"]]
++        if event_id in event_ids_in_list:
++            found_in_any_page = True
++            break
++    
++    assert found_in_any_page, f"Event {event_id} not found in any pagination result"
+--- a/visible_tests/issue-09/test_event_list_caching.py
++++ b/visible_tests/issue-09/test_event_list_caching.py
+@@ -0,0 +1,37 @@
++"""Test that caching doesn't prevent newly created events from appearing in the list."""
++from __future__ import annotations
++
++
++async def test_newly_created_event_appears_in_list_with_caching(client, auth_headers, tokens):
++    """Test that a newly created event is visible in the event list even with caching."""
++    new_event = {
++        "title": "Cached Test Event",
++        "starts_at": "2026-09-01T18:00:00+00:00",
++        "capacity": 50,
++        "price": "30.00",
++        "currency": "USD",
++    }
++    
++    # First, get the event list to populate the cache
++    initial_list_response = await client.get("/events")
++    assert initial_list_response.status_code == 200
++    initial_event_list = initial_list_response.json()
++    initial_count = initial_event_list["total"]
++    
++    # Create a new event
++    create_response = await client.post("/events", headers=auth_headers(tokens["alice"]), json=new_event)
++    assert create_response.status_code == 201
++    created_event = create_response.json()
++    event_id = created_event["id"]
++    
++    # Immediately fetch the event list again (should use cache)
++    cached_list_response = await client.get("/events")
++    assert cached_list_response.status_code == 200
++    cached_event_list = cached_list_response.json()
++    
++    # Check that the newly created event is in the cached list
++    event_ids_in_list = [event["id"] for event in cached_event_list["items"]]
++    assert event_id in event_ids_in_list, f"Event {event_id} not found in cached event list: {event_ids_in_list}"
++    
++    # Also verify the total count increased
++    assert cached_event_list["total"] == initial_count + 1, f"Expected total {initial_count + 1}, got {cached_event_list['total']}"
+--- a/visible_tests/issue-09/test_event_list_consistency.py
++++ b/visible_tests/issue-09/test_event_list_consistency.py
+@@ -0,0 +1,33 @@
++"""Test that newly created events appear in the event list immediately."""
++from __future__ import annotations
++
++
++async def test_newly_created_event_appears_in_list(client, auth_headers, tokens):
++    """Test that a newly created event is immediately visible in the event list."""
++    new_event = {
++        "title": "Immediate Test Event",
++        "starts_at": "2026-09-01T18:00:00+00:00",
++        "capacity": 50,
++        "price": "30.00",
++        "currency": "USD",
++    }
++    
++    # Create a new event
++    create_response = await client.post("/events", headers=auth_headers(tokens["alice"]), json=new_event)
++    assert create_response.status_code == 201
++    created_event = create_response.json()
++    event_id = created_event["id"]
++    
++    # Immediately fetch the event list
++    list_response = await client.get("/events")
++    assert list_response.status_code == 200
++    event_list = list_response.json()
++    
++    # Check that the newly created event is in the list
++    event_ids_in_list = [event["id"] for event in event_list["items"]]
++    assert event_id in event_ids_in_list, f"Event {event_id} not found in event list: {event_ids_in_list}"
++    
++    # Also verify the event details match
++    found_event = next((event for event in event_list["items"] if event["id"] == event_id), None)
++    assert found_event is not None
++    assert found_event["title"] == new_event["title"]

@@ -1,0 +1,23 @@
+case_id: issue-09
+summary: After an event is created, the event list endpoint does not always include
+  the new event immediately.
+invariants: []
+inputs:
+- Create a new event via the event creation API (or form submission) and subsequently
+  request the events list endpoint.
+expected_outputs:
+- The response from the events list endpoint contains the newly created event (identified
+  by its unique ID or slug) within a reasonable time frame.
+out_of_scope:
+- "UI rendering details, deployment processes, and any background jobs unrelated to\
+  \ the event\u2011listing endpoint."
+ambiguities:
+- No concrete steps to reliably reproduce the issue are provided.
+- It is unclear whether the list endpoint is expected to be strongly consistent or
+  eventually consistent.
+- Timing expectations (how soon after creation the event must appear) are not defined.
+- Details about pagination, filtering, or caching layers that might affect visibility
+  are missing.
+- No information about the environment (development, staging, production) or specific
+  request/response data is given.
+confidence: low

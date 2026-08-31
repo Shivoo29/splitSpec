@@ -1,0 +1,45 @@
+{
+  "score": 0.75,
+  "killed": 3,
+  "denominator": 4,
+  "excluded_unkillable": [
+    "m07-2"
+  ],
+  "results": [
+    {
+      "mutant_id": "m07-1",
+      "description": "original bug: DB unique constraint removed, check-then-insert has race window",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m07-2",
+      "description": "obvious-path-only fix: adds a process-local lock that fails under multiple workers",
+      "killed": false,
+      "detail": "test passed on this mutant (0 failed, 0 errors)",
+      "scored": false
+    },
+    {
+      "mutant_id": "m07-3",
+      "description": "sequential-only fix: uses SELECT FOR UPDATE which SQLite doesn't fully support",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m07-4",
+      "description": "returns right value (409) but wrong state (creates duplicate row anyway)",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    },
+    {
+      "mutant_id": "m07-5",
+      "description": "weakens-the-test fix: visible test only checks 201, ignores duplicate behavior",
+      "killed": true,
+      "detail": "test failed on this mutant (1 failed, 0 errors)",
+      "scored": true
+    }
+  ]
+}

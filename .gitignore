@@ -23,3 +23,6 @@ trajectories/*
 *.db
 *.sqlite3
 sweep*.log
+.env.bak
+.env.*
+!.env.example

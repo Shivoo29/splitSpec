@@ -33,3 +33,30 @@
 {"ts": 1788116633.146157, "actor": "fixer", "kind": "tool_call", "tool": "write_file", "path": "app/models.py", "chars": 4858}
 {"ts": 1788116641.8495505, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 13250, "output_tokens": 123, "finish_reason": "tool_calls", "tool_calls": 1}
 {"ts": 1788116641.849762, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/models.py", "chars": 4858, "truncated": false}
+{"ts": 1788160067.4245296, "actor": "contract", "kind": "call", "case_id": "issue-07", "model": "openai/gpt-oss-120b"}
+{"ts": 1788160067.427353, "actor": "contract", "kind": "tokens", "input_tokens": 947, "output_tokens": 1246, "model": "openai/gpt-oss-120b"}
+{"ts": 1788160067.4274108, "actor": "contract", "kind": "parsed", "case_id": "issue-07", "confidence": "high", "n_invariants": 1, "n_ambiguities": 4}
+{"ts": 1788160068.7163162, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 929, "output_tokens": 32, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160068.717115, "actor": "fixer", "kind": "tool_call", "tool": "list_files", "path": ".", "entries": 36}
+{"ts": 1788160070.2697318, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 1302, "output_tokens": 27, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160070.2699306, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/models.py", "chars": 4858, "truncated": false}
+{"ts": 1788160071.9713905, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 2525, "output_tokens": 31, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160071.9716349, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/routes/registrations.py", "chars": 4980, "truncated": false}
+{"ts": 1788160073.5335555, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 3778, "output_tokens": 36, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160073.5337727, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "visible_tests/issue-07/test_registrations.py", "chars": 2052, "truncated": false}
+{"ts": 1788160176.510972, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4375, "output_tokens": 27, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160176.5111897, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "conftest.py", "chars": 1060, "truncated": false}
+{"ts": 1788160191.8802109, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 4691, "output_tokens": 24, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160191.8803823, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "seed.py", "chars": 4466, "truncated": false}
+{"ts": 1788160204.7610753, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 6130, "output_tokens": 42, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160205.9478748, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "visible_tests/issue-07/test_registrations.py", "-v"], "exit_code": 0, "duration_sec": 1.187}
+{"ts": 1788160212.637511, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 6546, "output_tokens": 207, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160212.6377132, "actor": "fixer", "kind": "tool_call", "tool": "read_file", "path": "app/db.py", "chars": 1178, "truncated": false}
+{"ts": 1788160292.5291755, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 7031, "output_tokens": 1063, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160292.529389, "actor": "fixer", "kind": "tool_call", "tool": "write_file", "path": "test_concurrent_registration.py", "chars": 2809}
+{"ts": 1788160341.1671839, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8111, "output_tokens": 26, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160342.3052137, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_concurrent_registration.py", "-v", "-s"], "exit_code": 1, "duration_sec": 1.138}
+{"ts": 1788160404.9646242, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 8629, "output_tokens": 896, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160404.9648461, "actor": "fixer", "kind": "tool_call", "tool": "write_file", "path": "test_concurrent_registration.py", "chars": 2667}
+{"ts": 1788160407.6954117, "actor": "fixer", "kind": "model_call", "model": "devstral-2512", "input_tokens": 9542, "output_tokens": 26, "finish_reason": "tool_calls", "tool_calls": 1}
+{"ts": 1788160408.7626395, "actor": "fixer", "kind": "tool_call", "tool": "run_tests", "command": ["pytest", "test_concurrent_registration.py", "-v", "-s"], "exit_code": 0, "duration_sec": 1.067}

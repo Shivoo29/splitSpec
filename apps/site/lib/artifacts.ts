@@ -9,6 +9,9 @@ import path from "node:path";
  * backwards, the comment says what the wrong reading would look like on screen.
  */
 
+// Read at BUILD time, not request time: the whole site static-exports, so it
+// deploys to any host with no server and the numbers are frozen with the commit
+// that produced them.
 export const ARTIFACTS_DIR = path.resolve(process.cwd(), "../../artifacts");
 
 export type Verdict = "pass" | "fail" | "invalid" | "none";
@@ -57,7 +60,11 @@ export interface RunResult {
     touched_tests: boolean;
     notes: string;
   } | null;
-  verifier_test: { filename: string; invariant: string; assumptions: string[] } | null;
+  verifier_test: {
+    filename: string;
+    invariant: string;
+    assumptions: string[];
+  } | null;
   validity: {
     compiles: boolean | null;
     runs: boolean | null;
@@ -89,7 +96,11 @@ export type Entry =
   | { id: string; kind: "failed"; run: FailedRun };
 
 function isFailure(data: unknown): data is FailedRun {
-  return typeof data === "object" && data !== null && (data as { ok?: unknown }).ok === false;
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    (data as { ok?: unknown }).ok === false
+  );
 }
 
 export async function loadEntries(): Promise<Entry[]> {
@@ -155,9 +166,11 @@ export function stopReason(run: RunResult): string | null {
 
 /** Score over SCORED mutants only, matching mutation_results.json. Counting the
  *  unkillable ones here would put two different scores for one run on screen. */
-export function mutationScore(
-  mutation: MutationResult[],
-): { killed: number; denominator: number; excluded: string[] } {
+export function mutationScore(mutation: MutationResult[]): {
+  killed: number;
+  denominator: number;
+  excluded: string[];
+} {
   const scored = mutation.filter((m) => m.scored);
   return {
     killed: scored.filter((m) => m.killed).length,
@@ -191,7 +204,11 @@ export function decide(run: RunResult): RunResult["decision"] {
   if (run.visible !== null && !run.visible.passed) return "REJECT";
   if (run.patch?.touched_tests) return "REJECT";
   const validVerifier =
-    run.validity !== null && run.validity.passed && run.verifier !== null && run.verifier.passed;
-  if (run.visible !== null && run.visible.passed && validVerifier) return "ACCEPT";
+    run.validity !== null &&
+    run.validity.passed &&
+    run.verifier !== null &&
+    run.verifier.passed;
+  if (run.visible !== null && run.visible.passed && validVerifier)
+    return "ACCEPT";
   return "REVIEW REQUIRED";
 }

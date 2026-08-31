@@ -101,7 +101,9 @@ export async function loadResults(): Promise<Results> {
   const correctRuns = splitspec.filter((r) => r.gold?.passed);
   const brokenRuns = splitspec.filter((r) => r.gold && !r.gold.passed);
   const gated = splitspec.filter((r) => r.validity !== null);
-  const mutants = splitspec.flatMap((r) => r.mutation.filter((m) => m.scored !== false));
+  const mutants = splitspec.flatMap((r) =>
+    r.mutation.filter((m) => m.scored !== false),
+  );
 
   const caseIds = [...new Set(runs.map((r) => r.case_id))].sort();
   const rows = caseIds.map((caseId) => {

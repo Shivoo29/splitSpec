@@ -18,8 +18,6 @@ import {
   VerdictChip,
 } from "@/components/ui";
 
-export const dynamic = "force-dynamic";
-
 export async function generateStaticParams() {
   return (await loadEntries()).map((e) => ({ id: e.id }));
 }
@@ -37,7 +35,7 @@ export default async function RunPage({
   // as what it is and stop, rather than showing empty suites that read as data.
   if (entry.kind === "failed") {
     return (
-      <div className="mx-auto max-w-[1240px] px-8 py-12">
+      <div className="mx-auto max-w-[1120px] px-6 py-12">
         <h1 className="font-mono text-[24px] font-semibold tracking-[-0.02em]">
           {entry.id}
         </h1>
@@ -63,8 +61,8 @@ export default async function RunPage({
   const stop = stopReason(r);
 
   return (
-    <div className="mx-auto max-w-[1240px] px-8 py-12">
-      <header className="mb-8 flex flex-wrap items-end justify-between gap-4">
+    <div className="mx-auto max-w-[1120px] px-6 py-12">
+      <header className="rise mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-mono text-[24px] font-semibold tracking-[-0.02em]">
             {entry.id}

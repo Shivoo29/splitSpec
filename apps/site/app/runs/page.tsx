@@ -8,8 +8,6 @@ import {
 } from "@/lib/artifacts";
 import { Card, DecisionBadge, VerdictChip } from "@/components/ui";
 
-export const dynamic = "force-dynamic";
-
 function groupByCase(entries: Entry[]) {
   const map = new Map<string, Entry[]>();
   for (const e of entries) {
@@ -42,8 +40,8 @@ export default async function Home() {
   ).length;
 
   return (
-    <div className="mx-auto max-w-[1240px] px-8 py-12">
-      <header className="mb-10">
+    <div className="mx-auto max-w-[1120px] px-6 py-12">
+      <header className="rise mb-10">
         <h1 className="t-display">Run overview</h1>
         <p className="t-body mt-2 max-w-[62ch]">
           Every figure below is shown against the number of runs it was computed
@@ -51,22 +49,22 @@ export default async function Home() {
         </p>
       </header>
 
-      <div className="mb-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="rise d1 mb-10 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Card title="Runs on disk">
-          <p className="t-figure">{entries.length}</p>
+          <p className="t-figure text-brand">{entries.length}</p>
           <p className="t-caption mt-1.5">
             {entries.length - runs.length} failed before producing a result
           </p>
         </Card>
         <Card title="Shallow fixes">
-          <p className="t-figure">
+          <p className="t-figure text-brand">
             {shallow}
             <span className="text-fg-faint"> / {runs.length}</span>
           </p>
           <p className="t-caption mt-1.5">visible passed, gold failed</p>
         </Card>
         <Card title="Truncated attempts">
-          <p className="t-figure">
+          <p className="t-figure text-brand">
             {truncated}
             <span className="text-fg-faint"> / {runs.length}</span>
           </p>
@@ -126,7 +124,7 @@ export default async function Home() {
                         <tr key={entry.id} className="border-t border-border">
                           <td className="py-2 pr-3">
                             <Link
-                              href={`/run/${entry.id}`}
+                              href={`/runs/${entry.id}`}
                               className="hover:text-accent"
                             >
                               {entry.id}
@@ -148,7 +146,7 @@ export default async function Home() {
                       <tr key={entry.id} className="border-t border-border">
                         <td className="py-2 pr-3">
                           <Link
-                            href={`/run/${entry.id}`}
+                            href={`/runs/${entry.id}`}
                             className="hover:text-accent"
                           >
                             {entry.id}

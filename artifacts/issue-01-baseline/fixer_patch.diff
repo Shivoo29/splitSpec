@@ -1,0 +1,186 @@
+--- a/app/routes/events.py
++++ b/app/routes/events.py
+@@ -25,6 +25,20 @@
+     capacity: int = 100
+     price: Decimal
+     currency: str = "USD"
++
++    @field_validator("title")
++    @classmethod
++    def _check_title_not_empty(cls, value: str) -> str:
++        if not value.strip():
++            raise ValueError("title cannot be empty")
++        return value
++
++    @field_validator("price")
++    @classmethod
++    def _check_price_non_negative(cls, value: Decimal) -> Decimal:
++        if value < 0:
++            raise ValueError("price cannot be negative")
++        return value
+ 
+     @field_validator("currency")
+     @classmethod
+--- a/final_validation_test.py
++++ b/final_validation_test.py
+@@ -0,0 +1,63 @@
++"""Final comprehensive validation test."""
++import pytest
++from httpx import AsyncClient
++
++
++async def test_comprehensive_validation(client, auth_headers, tokens):
++    """Comprehensive test of all validation scenarios."""
++    
++    # Test 1: Empty title should be rejected
++    payload = {
++        "title": "",
++        "starts_at": "2026-06-01T09:00:00Z",
++        "capacity": 10,
++        "price": "25.00",
++        "currency": "USD",
++    }
++    r = await client.post("/events", headers=auth_headers(tokens["alice"]), json=payload)
++    assert r.status_code == 422, "Empty title should be rejected with 422"
++    assert "detail" in r.json(), "Error response should contain detail"
++    
++    # Test 2: Negative price should be rejected
++    payload = {
++        "title": "Test Event",
++        "starts_at": "2026-06-01T09:00:00Z",
++        "capacity": 10,
++        "price": "-25.00",
++        "currency": "USD",
++    }
++    r = await client.post("/events", headers=auth_headers(tokens["alice"]), json=payload)
++    assert r.status_code == 422, "Negative price should be rejected with 422"
++    assert "detail" in r.json(), "Error response should contain detail"
++    
++    # Test 3: Valid event should be created
++    payload = {
++        "title": "Valid Event",
++        "starts_at": "2026-06-01T09:00:00Z",
++        "capacity": 10,
++        "price": "25.00",
++        "currency": "USD",
++    }
++    r = await client.post("/events", headers=auth_headers(tokens["alice"]), json=payload)
++    assert r.status_code == 201, "Valid event should be created with 201"
++    assert r.json()["title"] == "Valid Event", "Response should contain correct title"
++    
++    # Test 4: Zero price should be accepted
++    payload = {
++        "title": "Free Event",
++        "starts_at": "2026-06-01T09:00:00Z",
++        "capacity": 10,
++        "price": "0.00",
++        "currency": "USD",
++    }
++    r = await client.post("/events", headers=auth_headers(tokens["alice"]), json=payload)
++    assert r.status_code == 201, "Zero price should be accepted with 201"
++    assert r.json()["price"] == "0.00", "Response should contain zero price"
++    
++    # Test 5: Verify invalid events were not created
++    listing = (await client.get("/events")).json()
++    titles = [e["title"] for e in listing["items"]]
++    assert "" not in titles, "Empty title event should not be in listing"
++    assert "Test Event" not in titles, "Negative price event should not be in listing"
++    assert "Valid Event" in titles, "Valid event should be in listing"
++    assert "Free Event" in titles, "Zero price event should be in listing"
+--- a/test_edge_cases.py
++++ b/test_edge_cases.py
+@@ -0,0 +1,50 @@
++"""Test edge cases for validation."""
++import pytest
++from httpx import AsyncClient
++
++
++async def test_whitespace_only_title_is_rejected(client, auth_headers, tokens):
++    """Test that creating an event with whitespace-only title is rejected."""
++    payload = {
++        "title": "   ",
++        "starts_at": "2026-06-01T09:00:00Z",
++        "capacity": 10,
++        "price": "25.00",
++        "currency": "USD",
++    }
++    r = await client.post("/events", headers=auth_headers(tokens["alice"]), json=payload)
++    assert r.status_code == 422  # Unprocessable Entity
++    body = r.json()
++    assert "detail" in body
++
++
++async def test_zero_price_is_accepted(client, auth_headers, tokens):
++    """Test that creating an event with zero price is accepted."""
++    payload = {
++        "title": "Free Event",
++        "starts_at": "2026-06-01T09:00:00Z",
++        "capacity": 10,
++        "price": "0.00",
++        "currency": "USD",
++    }
++    r = await client.post("/events", headers=auth_headers(tokens["alice"]), json=payload)
++    assert r.status_code == 201  # Created
++    body = r.json()
++    assert body["title"] == "Free Event"
++    assert body["price"] == "0.00"
++
++
++async def test_positive_price_is_accepted(client, auth_headers, tokens):
++    """Test that creating an event with positive price is accepted."""
++    payload = {
++        "title": "Paid Event",
++        "starts_at": "2026-06-01T09:00:00Z",
++        "capacity": 10,
++        "price": "99.99",
++        "currency": "USD",
++    }
++    r = await client.post("/events", headers=auth_headers(tokens["alice"]), json=payload)
++    assert r.status_code == 201  # Created
++    body = r.json()
++    assert body["title"] == "Paid Event"
++    assert body["price"] == "99.99"
+--- a/test_validation.py
++++ b/test_validation.py
+@@ -0,0 +1,41 @@
++"""Test validation of empty title and negative price."""
++import pytest
++from httpx import AsyncClient
++
++
++async def test_empty_title_is_rejected(client, auth_headers, tokens):
++    """Test that creating an event with empty title is rejected."""
++    payload = {
++        "title": "",
++        "starts_at": "2026-06-01T09:00:00Z",
++        "capacity": 10,
++        "price": "25.00",
++        "currency": "USD",
++    }
++    r = await client.post("/events", headers=auth_headers(tokens["alice"]), json=payload)
++    assert r.status_code == 422  # Unprocessable Entity
++    body = r.json()
++    assert "detail" in body
++    # Check that the event was not created
++    listing = (await client.get("/events")).json()
++    titles = [e["title"] for e in listing["items"]]
++    assert "" not in titles
++
++
++async def test_negative_price_is_rejected(client, auth_headers, tokens):
++    """Test that creating an event with negative price is rejected."""
++    payload = {
++        "title": "Test Event",
++        "starts_at": "2026-06-01T09:00:00Z",
++        "capacity": 10,
++        "price": "-25.00",
++        "currency": "USD",
++    }
++    r = await client.post("/events", headers=auth_headers(tokens["alice"]), json=payload)
++    assert r.status_code == 422  # Unprocessable Entity
++    body = r.json()
++    assert "detail" in body
++    # Check that the event was not created
++    listing = (await client.get("/events")).json()
++    titles = [e["title"] for e in listing["items"]]
++    assert "Test Event" not in titles

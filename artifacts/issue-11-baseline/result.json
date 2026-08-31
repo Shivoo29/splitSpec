@@ -1,6 +1,91 @@
 {
   "case_id": "issue-11",
   "mode": "baseline",
-  "ok": false,
-  "error": "The read operation timed out"
+  "models": [
+    {
+      "role": "contract",
+      "base_url": "https://api.groq.com/openai/v1",
+      "model": "openai/gpt-oss-120b",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    },
+    {
+      "role": "fixer",
+      "base_url": "https://api.mistral.ai/v1",
+      "model": "devstral-2512",
+      "calls": 0,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "retries": 0,
+      "fell_back_to": null
+    }
+  ],
+  "degraded": false,
+  "degraded_reason": "",
+  "contract": {
+    "case_id": "issue-11",
+    "summary": "Registrations have been reported to disappear intermittently, but the report lacks reproducible steps, identifiers, or timestamps.",
+    "invariants": [],
+    "inputs": [],
+    "expected_outputs": [],
+    "out_of_scope": [],
+    "ambiguities": [
+      "No deterministic steps to reproduce the disappearance are provided.",
+      "Missing specific account identifier(s) or registration ID(s).",
+      "No timestamp or time window indicating when the issue occurred.",
+      "Unclear which API endpoint or UI action is involved (e.g., mobile app, email confirmation, web UI).",
+      "Uncertain whether the disappearance is permanent or temporary, and what the expected persistence behavior is."
+    ],
+    "confidence": "low"
+  },
+  "patch": {
+    "case_id": "issue-11",
+    "diff": "--- a/app/routes/registrations.py\n+++ b/app/routes/registrations.py\n@@ -82,6 +82,10 @@\n \n     now = request.app.state.clock.utcnow()\n     if existing is not None:\n+        # Double-check the status right before updating to handle race conditions\n+        # where another request might have already reactivated this registration\n+        if existing.status == \"confirmed\":\n+            raise HTTPException(status_code=409, detail=\"already registered for this event\")\n         reg = existing\n         reg.status = \"confirmed\"\n         reg.created_at = now\n@@ -146,7 +150,7 @@\n     registration_id: int,\n     request: Request,\n     user: User = Depends(get_current_user),  # noqa: B008\n-    session: Session = Depends(get_session),  # noqa: B008\n+    session: Depends(get_session),  # noqa: B008\n ) -> dict:\n     reg = session.get(Registration, registration_id)\n     if reg is None:\n--- a/test_basic.py\n+++ b/test_basic.py\n@@ -0,0 +1,5 @@\n+\"\"\"Basic test to check if pytest is working.\"\"\"\n+\n+def test_basic():\n+    \"\"\"Basic test that should pass.\"\"\"\n+    assert 1 + 1 == 2\n--- a/test_simple.py\n+++ b/test_simple.py\n@@ -0,0 +1,18 @@\n+\"\"\"Simple test to check if the environment is working.\"\"\"\n+from app.main import create_app\n+from app.timeutil import FixedClock\n+from seed import seed\n+\n+# Test if we can create the app and seed the database\n+app = create_app(\"sqlite:///./test_simple.db\", clock=FixedClock.from_iso(\"2026-01-01T12:00:00+00:00\"))\n+with app.state.sessionmaker() as session:\n+    seed(session)\n+\n+print(\"App created and database seeded successfully!\")\n+\n+# Clean up\n+import os\n+try:\n+    os.remove(\"./test_simple.db\")\n+except FileNotFoundError:\n+    pass\n--- a/visible_tests/issue-11/test_race_condition.py\n+++ b/visible_tests/issue-11/test_race_condition.py\n@@ -0,0 +1,74 @@\n+\"\"\"Test for race condition in registration reactivation.\"\"\"\n+from __future__ import annotations\n+\n+import asyncio\n+import httpx\n+import pytest\n+import pytest_asyncio\n+\n+from app.main import create_app\n+from app.timeutil import FixedClock\n+from seed import BOB_TOKEN, seed\n+\n+FIXED_NOW = \"2026-01-01T12:00:00+00:00\"\n+\n+\n+@pytest_asyncio.fixture\n+async def client():\n+    # Use a file-based SQLite database instead of in-memory to avoid locking issues\n+    application = create_app(\"sqlite:///./test_race_condition.db\", clock=FixedClock.from_iso(FIXED_NOW))\n+    with application.state.sessionmaker() as session:\n+        seed(session)\n+    transport = httpx.ASGITransport(app=application)\n+    async with httpx.AsyncClient(transport=transport, base_url=\"http://test\") as ac:\n+        yield ac\n+    \n+    # Clean up\n+    import os\n+    try:\n+        os.remove(\"./test_race_condition.db\")\n+    except FileNotFoundError:\n+        pass\n+\n+\n+async def test_race_condition_reactivation(client):\n+    \"\"\"Test that concurrent reactivation of cancelled registration doesn't cause issues.\"\"\"\n+    headers = {\"Authorization\": f\"Bearer {BOB_TOKEN}\"}\n+    \n+    # Bob has a cancelled registration for event 1 (registration_id=2)\n+    # Let's try to reactivate it concurrently\n+    \n+    async def reactivate():\n+        try:\n+            response = await client.post(\"/registrations\", json={\"event_id\": 1}, headers=headers)\n+            return response.status_code, response.json()\n+        except Exception as e:\n+            return getattr(e, 'status_code', 500), {\"error\": str(e)}\n+    \n+    # Run multiple concurrent reactivation attempts\n+    tasks = [reactivate() for _ in range(5)]\n+    results = await asyncio.gather(*tasks)\n+    \n+    print(f\"Results: {results}\")\n+    \n+    # Count successful registrations (status 201)\n+    successful = sum(1 for status, _ in results if status == 201)\n+    conflicts = sum(1 for status, _ in results if status == 409)\n+    errors = sum(1 for status, _ in results if status >= 500)\n+    \n+    print(f\"Successful: {successful}, Conflicts: {conflicts}, Errors: {errors}\")\n+    \n+    # Only one should succeed, others should get 409 conflict\n+    assert successful == 1, f\"Expected 1 successful registration, got {successful}\"\n+    assert conflicts == 4, f\"Expected 4 conflicts, got {conflicts}\"\n+    assert errors == 0, f\"Unexpected errors: {errors}\"\n+    \n+    # Verify the registration is now confirmed\n+    list_response = await client.get(\"/registrations\", headers=headers)\n+    assert list_response.status_code == 200\n+    registrations = list_response.json()\n+    \n+    # Find the registration for event 1\n+    event1_reg = next((r for r in registrations if r[\"event_id\"] == 1), None)\n+    assert event1_reg is not None\n+    assert event1_reg[\"status\"] == \"confirmed\"\n--- a/visible_tests/issue-11/test_simple.py\n+++ b/visible_tests/issue-11/test_simple.py\n@@ -0,0 +1,22 @@\n+\"\"\"Simple test to check if the environment is working.\"\"\"\n+import pytest\n+import pytest_asyncio\n+\n+from app.main import create_app\n+from app.timeutil import FixedClock\n+from seed import seed\n+\n+FIXED_NOW = \"2026-01-01T12:00:00+00:00\"\n+\n+\n+@pytest_asyncio.fixture\n+async def client():\n+    application = create_app(\"sqlite:///./test_simple.db\", clock=FixedClock.from_iso(FIXED_NOW))\n+    with application.state.sessionmaker() as session:\n+        seed(session)\n+    return application\n+\n+\n+def test_simple(client):\n+    \"\"\"Simple test that should pass.\"\"\"\n+    assert True\n",
+    "files_changed": [
+      "app/routes/registrations.py",
+      "test_basic.py",
+      "test_simple.py",
+      "visible_tests/issue-11/test_race_condition.py",
+      "visible_tests/issue-11/test_simple.py"
+    ],
+    "lines_added": 124,
+    "lines_removed": 1,
+    "touched_tests": false,
+    "notes": "stop_reason=finished; I analyzed the issue of registrations occasionally disappearing and identified a race condition in the registration reactivation logic. The problem occurred when multiple concurrent requests tried to reactivate the same cancelled registration, potentially leading to inconsistent states. ## Changes Made **File: `app/routes/registrations.py`** - Added a second status check right before updating an existing cancelled registration - This prevents race conditions where another request might have already reactivated the registration - If the registration status is already \"confirmed\" when we're abou... [truncated, 1606 chars; full reply in trajectory.jsonl]"
+  },
+  "verifier_test": null,
+  "validity": null,
+  "visible": {
+    "label": "visible",
+    "command": "pytest -q --junitxml=/workspace/.junit/visible.xml test_registrations.py",
+    "passed": false,
+    "total": 0,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.076,
+    "stdout_tail": "",
+    "junit_xml_path": null
+  },
+  "verifier": null,
+  "gold": {
+    "label": "gold",
+    "command": "pytest -q --junitxml=/workspace/.junit/gold.xml /workspace/gold",
+    "passed": false,
+    "total": 0,
+    "failures": 0,
+    "errors": 0,
+    "duration_sec": 1.027,
+    "stdout_tail": "",
+    "junit_xml_path": null
+  },
+  "mutation": [],
+  "decision": "ESCALATE",
+  "runtime_sec": 838.356,
+  "cost_usd": 0.0,
+  "artifact_dir": "artifacts/issue-11-baseline"
 }
