@@ -84,7 +84,7 @@ LangGraph merges their outputs only at the freeze node.
 | Fixture app | FastAPI + SQLAlchemy + SQLite (PostgreSQL profile for concurrency realism) | seeded bugs must be real HTTP behavior, not toy functions |
 | Test framework | pytest, JUnit XML output | machine-readable pass/fail for the judge |
 | State/result store | JSON files under `artifacts/` | reproducible, diffable, no DB to stand up |
-| Traces | JSONL under `trajectories/` | one line per tool call, per model call, per test run |
+| Traces | JSONL at `artifacts/<run>/trajectory.jsonl` | one line per tool call, per model call, per test run |
 | Dashboard | Next.js (App Router), reads `artifacts/` | inspect runs, compare modes, show the evidence packet |
 
 ## 6. Data flow contracts

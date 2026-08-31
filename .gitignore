@@ -18,8 +18,6 @@ artifacts/*
 artifacts/**/*.sandbox.jsonl
 artifacts/**/.junit/
 artifacts/**/*.db
-trajectories/*
-!trajectories/.gitkeep
 *.db
 *.sqlite3
 sweep*.log
